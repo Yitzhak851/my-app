@@ -1,0 +1,10 @@
+**/node_modules
+**/venv
+**/.venv
+**/__pycache__
+**/dist
+**/coverage
+**/.env
+**/cypress/videos
+**/cypress/screenshots
+.git

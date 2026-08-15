@@ -1,0 +1,23 @@
+{
+  "name": "ybo-social-network",
+  "version": "1.0.0",
+  "private": true,
+  "description": "YBO Social Network - React + Flask + MySQL full stack application",
+  "scripts": {
+    "start": "node scripts/setup.mjs && node scripts/dev.mjs",
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "db:doctor": "node scripts/db-doctor.mjs",
+    "db:init": "node scripts/setup.mjs --db-only",
+    "db:reset": "node scripts/setup.mjs --db-only --force",
+    "test": "node scripts/test.mjs",
+    "test:frontend": "node scripts/test.mjs",
+    "test:backend": "node scripts/run-backend.mjs -m pytest",
+    "build": "node scripts/build.mjs",
+    "doctor": "node scripts/setup.mjs --check-only",
+    "db:probe": "node scripts/run-backend.mjs tools/db_probe.py"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

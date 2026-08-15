@@ -36,6 +36,7 @@ backend/uploads/
 .DS_Store
 Thumbs.db
 
-# --- Build/export artifacts ---
+# --- Transfer/export artifacts (never part of the source) ---
 _export.tgz
-_phase1.tgz
+_phase*.tgz
+*.tgz

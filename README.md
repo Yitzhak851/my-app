@@ -1,333 +1,307 @@
-# This is a Localhost version of 'YBO Social Network Application'
+# YBO Social Network
 
-שקם Networking App מלא - רשת חברתית עם React Frontend, Flask Backend ו-MySQL Database.
+A full-stack social network: users sign up, post rich-text content, follow each other,
+and read a feed that loads as they scroll.
 
-## 📋 תוכן עיניינים
-
-1. [תיאור](#תיאור)
-2. [טכנולוגיות](#טכנולוגיות)
-3. [מבנה הפרויקט](#מבנה-הפרויקט)
-4. [דרישות סיסטם](#דרישות-סיסטם)
-5. [התקנה](#התקנה)
-6. [הרצה](#הרצה)
-7. [בדיקות](#בדיקות)
-8. [API Endpoints](#api-endpoints)
-9. [סטטוס פיתוח](#סטטוס-פיתוח)
-10. [בעיות נפוצות](#בעיות-נפוצות)
+Built as the final project for the Full Stack course.
+**React + Vite** frontend · **Flask** API · **MySQL** database.
 
 ---
 
-## תיאור
+## Quick start
 
-YBO Social Network היא אפליקציית רשת חברתית מלאה המאפשרת למשתמשים:
-
-- הרשמה והתחברות
-- יצירה וצפייה בפוסטים
-- עקיבה אחר משתמשים (Follow/Unfollow)
-- צפייה בפרופילים של משתמשים
-- חיפוש משתמשים
-- ניהול פיד אישי
-
----
-
-## טכנולוגיות
-
-### Frontend
-- React 19.2.5 - User Interface
-- Vite 8.0.10 - Build tool
-- React Router 7.15.0 - Navigation
-- Material-UI (MUI) 9.0.0 - Component library
-- Vitest 1.0.4 - Unit testing
-- React Testing Library 14.1.2 - Component testing
-- Cypress 15.16.0 - E2E testing
-
-### Backend
-- Flask 3.0.0 - Web framework
-- Python 3.9+ - Programming language
-- MySQL Connector 8.2.0 - Database connection
-- Bcrypt 4.1.2 - Password hashing
-- Flask-CORS 4.0.0 - Cross-origin requests
-- python-dotenv 1.0.0 - Environment configuration
-
-### Database
-- MySQL 5.7+ - Relational database
-- Tables: users, posts, follows
-
----
-
-## מבנה הפרויקט
-
+```bash
+git clone https://github.com/Yitzhak851/my-app.git
+cd my-app
+npm start
 ```
-my-YBO-app/
-├── frontend/                    # React Frontend
-│   ├── src/
-│   │   ├── components/         # React components
-│   │   ├── pages/              # Page components
-│   │   ├── auth/               # Authentication
-│   │   ├── api/                # API client
-│   │   ├── tests/              # Unit tests
-│   │   ├── assets/             # Static files
-│   │   └── setupTests.js
-│   ├── cypress/                # E2E tests
-│   ├── .env
-│   ├── package.json
-│   ├── vite.config.js
-│   └── index.html
+
+`npm start` checks your prerequisites, installs both sides, creates `.env` files,
+builds the database, and starts both servers. It is safe to re-run at any time.
+
+When it finishes you will see:
+
+```text
+  Backend  http://localhost:5000
+  Frontend http://localhost:5173
+```
+
+Open **http://localhost:5173**.
+
+Demo accounts are seeded — sign in with any of them, password `Password123!`:
+
+| Email | Name |
+|---|---|
+| `dana@example.com` | Dana Levi |
+| `omri@example.com` | Omri Cohen |
+| `maya@example.com` | Maya Bar |
+
+### Don't want to install MySQL and Python?
+
+```bash
+docker compose up
+```
+
+This brings up the database, the API and the frontend together. Nothing but Docker required.
+
+---
+
+## Tech stack
+
+**Frontend** — React 19, Vite 8, React Router 7, Material-UI 9, Quill (rich text),
+DOMPurify (HTML sanitizing), Vitest + React Testing Library, Cypress
+
+**Backend** — Python 3.9+, Flask 3, Flask-CORS, mysql-connector-python, bcrypt, python-dotenv
+
+**Database** — MySQL 8 (or 5.7+)
+
+---
+
+## Architecture
+
+```text
+Browser
+  React SPA (Vite dev server, :5173)
+  ├─ AuthContext          session state
+  ├─ components/          UI
+  └─ api/api.js           all HTTP calls go through here
+        │
+        │  JSON over HTTP
+        ▼
+Flask API (:5000)
+  ├─ routes/     Blueprints — HTTP concerns only
+  ├─ services/   business logic
+  ├─ models/     data shapes
+  └─ utils/db    parameterized SQL
+        │
+        ▼
+MySQL  ·  users · posts · follows
+```
+
+Requests flow **routes → services → database**. Routes never touch SQL and services
+never touch the request object, which keeps each layer testable on its own.
+
+---
+
+## Requirements
+
+Install these yourself — the setup script checks for them but will not install
+system software on your behalf.
+
+| Software | Version | Needed for | Check |
+|---|---|---|---|
+| [Node.js](https://nodejs.org) | 18+ | frontend + the setup scripts | `node --version` |
+| [Python](https://python.org) | 3.9+ | backend | `python --version` |
+| [MySQL](https://dev.mysql.com/downloads/) | 5.7+ | database | `mysql --version` |
+
+On Windows, tick **"Add python.exe to PATH"** in the Python installer.
+
+Verify everything at once:
+
+```bash
+npm run doctor
+```
+
+If MySQL is missing you can still use the Docker path above.
+
+---
+
+## Environment setup
+
+`npm run setup` creates both `.env` files from their `.env.example` templates.
+Existing files are never overwritten.
+
+### `backend/.env`
+
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `FLASK_ENV` | no | `development` | `development` \| `testing` \| `production` |
+| `FLASK_DEBUG` | no | `False` | Auto-reload and the debugger. **Never `True` on a server** — the Werkzeug debugger allows remote code execution |
+| `HOST` | no | `127.0.0.1` | Interface to bind. Use `0.0.0.0` only behind nginx |
+| `PORT` | no | `5000` | API port |
+| `DB_HOST` | **yes** | `localhost` | MySQL host |
+| `DB_USER` | **yes** | `root` | MySQL user |
+| `DB_PASSWORD` | **yes** | — | Your own local MySQL password. Leave empty if your MySQL has none |
+| `DB_NAME` | **yes** | `social_app` | Database name — must match `db/schema.sql` |
+| `CORS_ORIGINS` | **yes** | `http://localhost:5173` | Comma-separated origins allowed to call the API. Add your deployed frontend origin in production |
+| `SECRET_KEY` | **yes** | — | Signs session cookies. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
+
+### `frontend/.env`
+
+| Variable | Required | Default | What it does |
+|---|---|---|---|
+| `VITE_API_BASE_URL` | **yes** | `http://localhost:5000/api` | Where the frontend sends API calls. Change this when deploying |
+
+> `.env` files are gitignored. Never commit real credentials — put placeholders in
+> `.env.example` instead.
+
+---
+
+## Database setup
+
+`npm run setup` does this automatically. To do it manually:
+
+```bash
+mysql -u root -p < db/schema.sql
+mysql -u root -p < db/seed.sql     # optional demo data
+```
+
+| File | Contents |
+|---|---|
+| `db/schema.sql` | Database, tables, foreign keys, indexes. Re-runnable |
+| `db/seed.sql` | Demo users, posts and follows. Re-runnable |
+
+### Schema
+
+```text
+users                          posts                        follows
+─────                          ─────                        ───────
+id            PK  ◄──────┐     id            PK       ┌───► follower_id   PK,FK
+email         UNIQUE     └──── user_id       FK       ├───► following_id  PK,FK
+password      (bcrypt)         title                  │     created_at
+name                           body    (sanitized HTML)│
+bio                            image_url              │
+profile_picture                created_at             │
+created_at  ◄──────────────────────────────────────────┘
+```
+
+All foreign keys use `ON DELETE CASCADE`, so removing a user removes their posts
+and follow relationships rather than leaving orphaned rows.
+
+---
+
+## Available scripts
+
+Run from the project root.
+
+| Command | What it does |
+|---|---|
+| `npm start` | Setup, then run both servers. **The one command** |
+| `npm run setup` | Prerequisites, dependencies, `.env` files, database. Idempotent — a repeat run takes about a second because it skips work that is already done |
+| `npm run setup -- --reinstall` | Force a clean `npm ci`, e.g. after a broken install |
+| `npm run dev` | Run backend + frontend together (assumes setup is done) |
+| `npm run doctor` | Check prerequisites only. Changes nothing |
+| `npm test` | Run both test suites |
+| `npm run build` | Production build of the frontend into `frontend/dist` |
+| `npm run db:doctor` | Diagnose a MySQL connection problem. Reads nothing secret, writes nothing |
+| `npm run db:init` | Apply schema + seed only |
+| `npm run db:reset` | **Drop** the database and rebuild it from scratch |
+
+Frontend-only (run inside `frontend/`):
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Vite dev server |
+| `npm run test` | Vitest, once |
+| `npm run test:watch` | Vitest, watch mode |
+| `npm run test:coverage` | Vitest with a coverage report |
+| `npm run test:e2e` | Cypress end-to-end tests |
+| `npm run lint` | ESLint |
+
+---
+
+## Project structure
+
+```text
+my-app/
+├── package.json            root scripts — the entry point
+├── docker-compose.yml      full environment in containers
 │
-├── backend/                    # Flask Backend
-│   ├── app/
-│   │   ├── __init__.py        # Flask factory
-│   │   ├── config/            # Configuration
-│   │   ├── models/            # Data models
-│   │   ├── services/          # Business logic
-│   │   ├── routes/            # API endpoints
-│   │   └── utils/             # Utilities
-│   ├── .env
+├── db/
+│   ├── schema.sql          tables, keys, indexes
+│   └── seed.sql            demo data
+│
+├── scripts/
+│   ├── setup.mjs           prerequisites, install, configure, database
+│   ├── dev.mjs             runs both servers with one Ctrl+C
+│   ├── test.mjs            runs both test suites
+│   ├── run-backend.mjs     runs a command inside the backend venv
+│   └── lib/env.mjs         shared helpers (no npm dependencies)
+│
+├── backend/
+│   ├── run.py              entry point
 │   ├── requirements.txt
-│   └── run.py
+│   ├── Dockerfile
+│   └── app/
+│       ├── __init__.py     app factory, CORS, error handlers
+│       ├── config/         environment-based configuration
+│       ├── models/         data shapes
+│       ├── routes/         Blueprints: auth, posts, users, follows
+│       ├── services/       business logic
+│       └── utils/db.py     database access
 │
-├── scripts/                   # Automation scripts
-│   ├── install-all.bat
-│   ├── start-app.bat
-│   └── test-all.bat
-│
-├── package.json              # Root npm scripts
-└── README.md
+└── frontend/
+    ├── package.json
+    ├── vite.config.js      build config
+    ├── vitest.config.js    test config
+    ├── Dockerfile
+    ├── cypress/            end-to-end tests
+    └── src/
+        ├── api/api.js      every HTTP call
+        ├── auth/           AuthContext + ProtectedRoute
+        ├── components/     UI components
+        └── tests/          unit tests
 ```
 
 ---
 
-## דרישות סיסטם
+## API
 
-### Windows
-- Node.js 18+
-- Python 3.9+
-- MySQL 5.7+
-- Git Bash (recommended)
+Base URL: `http://localhost:5000/api`
 
-### Verification
-```bash
-node --version        # Should show v18.x.x or higher
-python --version      # Should show 3.9.x or higher
-mysql --version       # Should show 5.7.x or higher
-```
-
----
-
-## התקנה
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/Yitzhak851/YBO-fullstack-assignment-course.git
-cd YBO-fullstack-assignment-course/my-YBO-app
-```
-
-### 2. Install Dependencies
-
-**Using script (Windows):**
-```bash
-scripts/install-all.bat
-```
-
-**Manual installation:**
-
-Frontend:
-```bash
-cd frontend && npm install && cd ..
-```
-
-Backend:
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate.bat
-pip install -r requirements.txt
-cd ..
-```
-
-### 3. Setup Environment Variables
-
-Frontend (.env):
-```env
-VITE_API_BASE_URL=http://localhost:5000/api
-```
-
-Backend (.env):
-```env
-FLASK_ENV=development
-FLASK_DEBUG=True
-PORT=5000
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your-local-mysql-password
-DB_NAME=social_app
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-SECRET_KEY=change-me-generate-a-random-value
-```
-
-### 4. Database Setup
-
-Run SQL commands in MySQL:
-```sql
-CREATE DATABASE IF NOT EXISTS social_app;
-
-USE social_app;
-
-CREATE TABLE users (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password VARCHAR(255) NOT NULL,
-  name VARCHAR(100),
-  bio TEXT,
-  profile_picture VARCHAR(255),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE posts (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  user_id INT NOT NULL,
-  title VARCHAR(255) NOT NULL,
-  body TEXT NOT NULL,
-  image_url VARCHAR(255),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE TABLE follows (
-  follower_id INT NOT NULL,
-  following_id INT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (follower_id, following_id),
-  FOREIGN KEY (follower_id) REFERENCES users(id),
-  FOREIGN KEY (following_id) REFERENCES users(id)
-);
-```
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/health` | Service check |
+| `POST` | `/auth/signup` | Create an account |
+| `POST` | `/auth/login` | Sign in |
+| `GET` | `/posts/` | Feed. `?start&limit&userId&followingOnly&currentUserId` |
+| `POST` | `/posts/` | Create a post |
+| `GET` | `/users/` | List/search users. `?start&limit&search` |
+| `GET` | `/users/<id>` | One user |
+| `GET` | `/users/<id>/follow-stats` | Follower, following and post counts |
+| `POST` | `/follows/` | Follow a user |
+| `DELETE` | `/follows/` | Unfollow a user |
+| `GET` | `/follows/check` | Is A following B |
+| `GET` | `/follows/<id>/followers` | Who follows this user |
+| `GET` | `/follows/<id>/following` | Who this user follows |
 
 ---
 
-## הרצה
+## Troubleshooting
 
-### Option 1: Using Script (Windows)
+**`npm start` says Python is not found (Windows)**
+Python was installed without being added to PATH. Re-run the installer, choose
+*Modify*, and enable *Add python.exe to PATH*. Then open a new terminal.
+
+**`cannot connect to MySQL`**
+The server isn't running, or `DB_PASSWORD` in `backend/.env` is wrong. Test your
+credentials directly with `mysql -u root -p`. Or skip MySQL entirely with `docker compose up`.
+
+**`could not create the virtualenv` (Linux)**
+`sudo apt install python3-venv`
+
+**Port 5000 or 5173 already in use**
+
 ```bash
-scripts/start-app.bat
-```
-
-### Option 2: Manual Start
-
-Terminal 1 (Backend):
-```bash
-cd backend
-venv\Scripts\activate.bat
-python run.py
-```
-
-Terminal 2 (Frontend):
-```bash
-cd frontend
-npm run dev
-```
-
-Open http://localhost:5173 in your browser.
-
-### Option 3: npm scripts
-```bash
-npm run start-app
-```
-
----
-
-## בדיקות
-
-### Unit Tests
-```bash
-cd frontend
-npm run test
-```
-
-### E2E Tests
-```bash
-cd frontend
-npm run test:e2e
-```
-
-### Run All Tests
-```bash
-npm run test-all
-```
-
----
-
-## API Endpoints
-
-**Auth:**
-- POST /api/auth/signup
-- POST /api/auth/login
-
-**Posts:**
-- GET /api/posts
-- POST /api/posts
-
-**Users:**
-- GET /api/users
-- GET /api/users/:id
-- GET /api/users/:id/follow-stats
-
-**Follows:**
-- POST /api/follows
-- DELETE /api/follows
-- GET /api/follows/check
-- GET /api/follows/:id/followers
-- GET /api/follows/:id/following
-
----
-
-## סטטוס פיתוח
-
-### Completed
-- Flask backend with Blueprints
-- Database models and services
-- Authentication (signup/login)
-- Posts CRUD
-- Users management
-- Follow system
-- Environment configuration
-- CORS setup
-- Frontend API client
-- Unit tests (Vitest)
-- E2E tests (Cypress)
-- Automation scripts
-
----
-
-## בעיות נפוצות
-
-### Port 5000 already in use
-```bash
+# Windows
 netstat -ano | findstr :5000
 taskkill /PID <PID> /F
+
+# macOS / Linux
+lsof -ti:5000 | xargs kill -9
 ```
 
-Or change PORT in backend/.env
+Or change `PORT` in `backend/.env`.
 
-### MySQL connection failed
-1. Verify MySQL is running
-2. Check credentials in backend/.env
-3. Verify database exists
+**Frontend loads but shows no posts**
+The API isn't reachable. Check `http://localhost:5000/api/health` in your browser,
+confirm `VITE_API_BASE_URL` in `frontend/.env`, and look for CORS errors in the
+browser console — the frontend's origin must appear in `CORS_ORIGINS`.
 
-### Frontend can't connect to backend
-1. Ensure backend is running on localhost:5000
-2. Check frontend/.env has correct API URL
-3. Verify CORS is enabled
+**The database is in a bad state**
 
-### Tests not running
 ```bash
-cd frontend
-rm -r node_modules
-npm install
-npm run test
+npm run db:reset
 ```
 
----
-
-**Version:** 1.0.0
-**Last Updated:** June 2024
+This drops and rebuilds it. All data is lost.

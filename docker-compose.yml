@@ -1,0 +1,77 @@
+# =============================================================================
+#  Full development environment: MySQL + Flask API + React dev server.
+#
+#      docker compose up
+#
+#  Nothing needs to be installed beyond Docker itself — no MySQL, no Python,
+#  no Node. This is the fallback path when the native setup hits a missing
+#  system prerequisite, and it satisfies optional requirement 3.f.
+# =============================================================================
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ybo-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: devpassword
+      MYSQL_DATABASE: social_app
+    ports:
+      # exposed so you can inspect the DB from your host with any client
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      # Files in this directory run automatically on first start, in name order.
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      # The API must not start before MySQL can actually answer queries.
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pdevpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  backend:
+    build: ./backend
+    container_name: ybo-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "False"      # never expose the Werkzeug debugger, even locally
+      HOST: 0.0.0.0             # must bind all interfaces inside a container
+      PORT: "5000"
+      DB_HOST: db               # the compose service name
+      DB_USER: root
+      DB_PASSWORD: devpassword
+      DB_NAME: social_app
+      CORS_ORIGINS: http://localhost:5173
+      SECRET_KEY: dev-only-not-for-production
+    ports:
+      - "5000:5000"
+    volumes:
+      # live reload of source without rebuilding the image
+      - ./backend/app:/app/app:ro
+      - ./backend/run.py:/app/run.py:ro
+
+  frontend:
+    build: ./frontend
+    container_name: ybo-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: http://localhost:5000/api
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html:ro
+      # keep the image's node_modules; do not let the host directory shadow it
+      - /app/node_modules
+
+volumes:
+  db_data:
