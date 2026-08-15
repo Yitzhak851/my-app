@@ -1,4 +1,4 @@
-# YBO Social Network Application
+# This is a Localhost version of 'YBO Social Network Application'
 
 שקם Networking App מלא - רשת חברתית עם React Frontend, Flask Backend ו-MySQL Database.
 
