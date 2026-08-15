@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "title": "First Post",
+    "body": "This is the first test post",
+    "image_url": null,
+    "created_at": "2024-01-01T10:00:00",
+    "name": "Test User",
+    "email": "test@example.com",
+    "profile_picture": "https://api.dicebear.com/9.x/adventurer/svg?seed=TestUser"
+  },
+  {
+    "id": 2,
+    "user_id": 1,
+    "title": "Second Post",
+    "body": "This is the second test post",
+    "image_url": null,
+    "created_at": "2024-01-02T10:00:00",
+    "name": "Test User",
+    "email": "test@example.com",
+    "profile_picture": "https://api.dicebear.com/9.x/adventurer/svg?seed=TestUser"
+  },
+  {
+    "id": 3,
+    "user_id": 1,
+    "title": "Third Post",
+    "body": "This is the third test post",
+    "image_url": null,
+    "created_at": "2024-01-03T10:00:00",
+    "name": "Test User",
+    "email": "test@example.com",
+    "profile_picture": "https://api.dicebear.com/9.x/adventurer/svg?seed=TestUser"
+  }
+]
