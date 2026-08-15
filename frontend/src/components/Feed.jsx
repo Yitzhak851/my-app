@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import { useParams } from "react-router-dom";
 import SinglePost from "./SinglePost";
+import ViewModeToggle from "./ViewModeToggle";
+import { VIEW_MODES, gridColumnsFor } from "./viewMode";
 import { fetchPosts } from "../api/api";
 import { useAuth } from "../auth/AuthContext";
 
@@ -13,7 +15,7 @@ function Feed() {
   const [posts, setPosts] = useState([]);
   const [start, setStart] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState("grid");
+  const [viewMode, setViewMode] = useState(VIEW_MODES.GRID);
   const [feedFilter, setFeedFilter] = useState("all");
   const [hasMore, setHasMore] = useState(true);
 
@@ -29,12 +31,12 @@ function Feed() {
       const currentStart = reset ? 0 : start;
       const limit = 10;
 
+      // The server resolves "following" from the session, so no user id here.
       const newPosts = await fetchPosts(
         currentStart,
         limit,
         userId,
-        feedFilter === "following",
-        currentUser?.id
+        feedFilter === "following"
       );
 
       setPosts((prevPosts) =>
@@ -78,7 +80,12 @@ function Feed() {
   return (
     <Box
       sx={{
-        maxWidth: viewMode === "grid" ? 1200 : 700,
+        // width:100% matters. #root is a column flex container, and a flex item
+        // with `margin-inline: auto` does NOT stretch — it sizes to its content.
+        // Without this the feed sat at ~1027px on any screen, which is why the
+        // grid could only ever fit two columns.
+        width: "100%",
+        maxWidth: viewMode === VIEW_MODES.GRID ? 1320 : 700,
         mx: "auto",
         mt: 4,
         mb: 4,
@@ -110,41 +117,17 @@ function Feed() {
         </Box>
       )}
 
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "center",
-          gap: 2,
-          mb: 3,
-        }}
-      >
-        <Button
-          variant={viewMode === "grid" ? "contained" : "outlined"}
-          onClick={() => setViewMode("grid")}
-        >
-          Grid View
-        </Button>
-
-        <Button
-          variant={viewMode === "list" ? "contained" : "outlined"}
-          onClick={() => setViewMode("list")}
-        >
-          List View
-        </Button>
-      </Box>
+      <ViewModeToggle value={viewMode} onChange={setViewMode} sx={{ mb: 3 }} />
 
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns:
-            viewMode === "grid"
-              ? "repeat(auto-fit, minmax(320px, 1fr))"
-              : "1fr",
+          gridTemplateColumns: gridColumnsFor(viewMode, 300),
           gap: 3,
         }}
       >
         {posts.map((post) => (
-          <SinglePost key={post.id} post={post} />
+          <SinglePost key={post.id} post={post} viewMode={viewMode} />
         ))}
       </Box>
 

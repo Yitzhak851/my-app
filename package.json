@@ -15,7 +15,8 @@
     "test:backend": "node scripts/run-backend.mjs -m pytest",
     "build": "node scripts/build.mjs",
     "doctor": "node scripts/setup.mjs --check-only",
-    "db:probe": "node scripts/run-backend.mjs tools/db_probe.py"
+    "db:probe": "node scripts/run-backend.mjs tools/db_probe.py",
+    "db:diagram": "node scripts/db-diagram.mjs"
   },
   "engines": {
     "node": ">=18"

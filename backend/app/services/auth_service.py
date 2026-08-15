@@ -1,7 +1,6 @@
 import bcrypt
 import re
 from app.utils.db import Database
-from app.models import User
 
 
 class AuthService:

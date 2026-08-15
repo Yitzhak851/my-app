@@ -1,7 +1,6 @@
 // my-YBO-app/src/App.jsx : Setting Pages/Routes and define which URL renders which component
 // some necessary imports for routing and components
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Home from "./components/Feed";
 import Feed from "./components/Feed";
 import Login from "./components/Login";
 import NewPost from "./components/NewPost";
@@ -9,7 +8,6 @@ import Search from "./components/Search";
 import Signup from "./components/Signup";
 import SinglePost from "./components/SinglePost";
 import ToolbarComponent from "./components/ToolbarComponent";
-import User from "./components/User";
 import Users from "./components/Users";
 import UserProfile from "./components/UserProfile";
 import ProtectedRoute from "./auth/ProtectedRoute";
@@ -29,7 +27,6 @@ function App() {
         <Route path="/search" element={<Search />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/post/:postId" element={<SinglePost />} />
-        <Route path="/ToolbarComponent" element={<ToolbarComponent />} />
 
         <Route path="/users" element={<Users />} />
         <Route path="/user/:id" element={<UserProfile />} />

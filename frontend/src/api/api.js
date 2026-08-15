@@ -1,125 +1,180 @@
 // my-YBO-app/src/api/api.js
+//
+// Every HTTP call in the app goes through this module. Components must not call
+// fetch() directly: when they do, the API base URL gets hardcoded in several
+// places and the app cannot be deployed anywhere other than localhost.
 
-const BASE_URL = "http://localhost:5000/api";
+// Configurable so the same build can point at localhost, staging or production.
+// The fallback keeps the app working if .env is missing after a fresh clone.
+const BASE_URL =
+  import.meta.env?.VITE_API_BASE_URL || "http://localhost:5000/api";
 
-// Fetch posts with optional pagination and filters
-export async function fetchPosts(
-  start = 0,
-  limit = 10,
-  userId = null,
-  followingOnly = false,
-  currentUserId = null
-) {
-  let url = `${BASE_URL}/posts?start=${start}&limit=${limit}`;
-
-  if (userId) {
-    url += `&userId=${userId}`;
+/**
+ * Single place where a failed response becomes an Error, so every caller gets a
+ * useful message instead of "undefined" or a silent success.
+ */
+async function request(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      // Without this the browser silently drops the session cookie on every
+      // cross-origin call, and the API sees an anonymous request.
+      credentials: "include",
+      ...options,
+    });
+  } catch {
+    // fetch() only rejects on a network-level failure.
+    throw new Error("Cannot reach the server. Is the backend running?");
   }
 
-  if (followingOnly && currentUserId) {
-    url += `&followingOnly=true&currentUserId=${currentUserId}`;
+  let data = null;
+  const text = await response.text();
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
   }
-
-  const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error("Failed to fetch posts");
+    const error = new Error(data?.error || `Request failed (${response.status})`);
+    // Callers need to tell "you are signed out" (401) and "you are not allowed"
+    // (403) apart from a generic failure.
+    error.status = response.status;
+    throw error;
   }
-
-  return response.json();
+  return data;
 }
 
-// Fetch users with optional pagination and search
-export async function fetchUsers(start = 0, limit = 10, search = "") {
-  const response = await fetch(
-    `${BASE_URL}/users?start=${start}&limit=${limit}&search=${search}`
+const query = (params) => {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== null && value !== undefined && value !== "") {
+      search.append(key, value);
+    }
+  }
+  const s = search.toString();
+  return s ? `?${s}` : "";
+};
+
+// ─────────────────────────────────────────────────────────────── posts ──────
+
+export function fetchPosts(start = 0, limit = 10, userId = null, followingOnly = false) {
+  // followingOnly no longer takes a user id: the server reads it from the
+  // session, so one person cannot request another person's personal feed.
+  return request(
+    `/posts/${query({
+      start,
+      limit,
+      userId,
+      ...(followingOnly ? { followingOnly: "true" } : {}),
+    })}`
   );
-
-  if (!response.ok) {
-    throw new Error("Failed to fetch users");
-  }
-
-  return response.json();
 }
 
-export async function login(email, password) {
-  const response = await fetch(`${BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || "Login failed");
-  }
-
-  return response.json();
+/**
+ * Uploads one image and resolves to { url, filename }.
+ *
+ * No Content-Type header: the browser must set it itself so it can add the
+ * multipart boundary. Setting it by hand produces a body the server cannot parse.
+ */
+export function uploadImage(file) {
+  const form = new FormData();
+  form.append("image", file);
+  return request("/uploads/image", { method: "POST", body: form });
 }
 
-
-export async function createPost(postData) {
-  const response = await fetch(`${BASE_URL}/posts`, {
+export function createPost(postData) {
+  return request("/posts/", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(postData),
   });
-
-  if (!response.ok) {
-    throw new Error("Failed to create post");
-  }
-
-  return response.json();
 }
 
-export async function followUser(followerId, followingId) {
-  const response = await fetch(`${BASE_URL}/follows`, {
+// ─────────────────────────────────────────────────────────────── users ──────
+
+export function fetchUsers(start = 0, limit = 10, search = "") {
+  return request(`/users/${query({ start, limit, search })}`);
+}
+
+/**
+ * Returns the user object itself. The API responds with the user at the top
+ * level — NOT wrapped in { user: ... }. Reading `data.user` here is what made
+ * the profile page throw and render "Failed to load user profile".
+ */
+export function fetchUser(userId) {
+  return request(`/users/${userId}`);
+}
+
+export function fetchFollowStats(userId) {
+  return request(`/users/${userId}/follow-stats`);
+}
+
+// ───────────────────────────────────────────────────────────── follows ──────
+
+export function followUser(followingId) {
+  return request("/follows/", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      follower_id: followerId,
-      following_id: followingId,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ following_id: followingId }),
   });
-
-  return response.json();
 }
 
-export async function unfollowUser(followerId, followingId) {
-  const response = await fetch(`${BASE_URL}/follows`, {
+export function unfollowUser(followingId) {
+  return request("/follows/", {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      follower_id: followerId,
-      following_id: followingId,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ following_id: followingId }),
   });
-
-  return response.json();
 }
 
-export async function checkIfFollowing(followerId, followingId) {
-  const response = await fetch(
-    `${BASE_URL}/follows/check?follower_id=${followerId}&following_id=${followingId}`
-  );
-
-  return response.json();
+/**
+ * Resolves to a plain boolean. The API field is snake_case (`is_following`);
+ * returning the raw object invited callers to read `result.isFollowing`, which
+ * is always undefined — the follow button was permanently stuck on "Follow".
+ */
+export async function checkIfFollowing(followingId) {
+  const data = await request(`/follows/check${query({ following_id: followingId })}`);
+  return Boolean(data?.is_following);
 }
 
-export async function fetchFollowStats(userId) {
-  const response = await fetch(`${BASE_URL}/users/${userId}/follow-stats`);
+export function fetchFollowers(userId) {
+  return request(`/follows/${userId}/followers`);
+}
 
-  if (!response.ok) {
-    throw new Error("Failed to fetch follow stats");
-  }
+export function fetchFollowing(userId) {
+  return request(`/follows/${userId}/following`);
+}
 
-  return response.json();
+// ──────────────────────────────────────────────────────────────── auth ──────
+
+export function login(email, password) {
+  return request("/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function signup(email, password, name) {
+  return request("/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, name }),
+  });
+}
+
+export function logout() {
+  return request("/auth/logout", { method: "POST" });
+}
+
+/**
+ * Who the session cookie belongs to. Rejects with status 401 when signed out.
+ * This is the source of truth for the signed-in user — localStorage is not,
+ * because the server can end a session at any time.
+ */
+export function fetchCurrentUser() {
+  return request("/auth/me");
 }

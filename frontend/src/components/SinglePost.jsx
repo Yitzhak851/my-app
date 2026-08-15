@@ -37,8 +37,6 @@ function timeAgo(dateString) {
 
 function SinglePost({ post, viewMode = "list" }) {
 
-  console.log("POST BODY:", post.body);
-
   const [expanded, setExpanded] = useState(false);
 
   const isGrid = viewMode === "grid";
@@ -100,7 +98,7 @@ function SinglePost({ post, viewMode = "list" }) {
               color="primary"
               sx={{ mb: 1, fontStyle: "italic" }}
             >
-              {post.name || post.email}
+              {post.name || "Unknown user"}
             </Typography>
 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

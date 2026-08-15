@@ -1,12 +1,19 @@
 // my-YBO-app/src/components/ToolbarComponent.jsx
 
 import { AppBar, Toolbar, Typography, Button, Box } from "@mui/material";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import logo from "../assets/logo.png";
 
 function ToolbarComponent() {
   const { currentUser, isLoggedIn, logout } = useAuth();
+  const navigate = useNavigate();
+
+  // logout() now ends the session on the server, so it is asynchronous.
+  async function handleLogout() {
+    await logout();
+    navigate("/");
+  }
 
   return (
     <AppBar position="static">
@@ -95,7 +102,7 @@ function ToolbarComponent() {
 
               <Button
                 color="warning"
-                onClick={logout}
+                onClick={handleLogout}
                 sx={{
                   p: 0,
                   minWidth: "auto",

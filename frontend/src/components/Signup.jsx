@@ -7,7 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 function Signup() {
   
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { signup } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
@@ -30,24 +30,7 @@ function Signup() {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Signup failed");
-      }
-
-      login(data.user);
+      await signup(email.trim(), password);
       navigate("/");
     } catch (err) {
       setError(err.message);

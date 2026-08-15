@@ -57,8 +57,13 @@ body {
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
+  /* A hard-coded `width: 1126px` used to live here, left over from a template.
+     It capped the whole app regardless of screen size: the feed's grid ended up
+     995px wide, thirteen pixels short of fitting a third 320px column, so posts
+     stacked one per row on any normal laptop. Fluid width with a ceiling gives
+     the grid room to breathe and makes the layout work on a phone. */
+  width: 100%;
+  max-width: 1400px;
   margin: 0 auto;
   text-align: center;
   border-inline: 1px solid var(--border);

@@ -1,5 +1,4 @@
 from app.utils.db import Database
-from app.models import Post
 
 
 class PostsService:
@@ -9,7 +8,7 @@ class PostsService:
     def fetch_posts(start=0, limit=10, user_id=None, following_only=False, current_user_id=None):
         """Fetch posts with optional filters"""
         sql = """
-            SELECT posts.*, users.email, users.name, users.profile_picture
+            SELECT posts.*, users.name, users.profile_picture
             FROM posts
             JOIN users ON posts.user_id = users.id
         """
@@ -70,7 +69,6 @@ class PostsService:
                     posts.image_url,
                     posts.created_at,
                     users.name,
-                    users.email,
                     users.profile_picture
                 FROM posts
                 JOIN users ON posts.user_id = users.id

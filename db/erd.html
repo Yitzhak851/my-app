@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>YBO Social Network — database diagram</title>
+<style>
+  body { margin: 0; padding: 2rem; font-family: system-ui, sans-serif; background: #fff; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1.5rem; }
+  .mermaid { display: flex; justify-content: center; }
+</style>
+</head>
+<body>
+<h1>YBO Social Network — database schema</h1>
+<pre class="mermaid">
+%% YBO Social Network — entity relationship diagram
+%% Source of truth for db/erd.svg. Regenerate with: npm run db:diagram
+erDiagram
+    USERS ||--o{ POSTS : "writes"
+    USERS ||--o{ COMMENTS : "writes"
+    USERS ||--o{ LIKES : "gives"
+    USERS ||--o{ SESSIONS : "signs in with"
+    USERS ||--o{ PASSWORD_RESETS : "requests"
+    USERS ||--o{ REPORTS : "files"
+    USERS ||--o{ FOLLOWS : "follows"
+    USERS ||--o{ FOLLOWS : "is followed by"
+
+    POSTS ||--o{ COMMENTS : "receives"
+    POSTS ||--o{ LIKES : "receives"
+    POSTS ||--o{ REPORTS : "is reported in"
+
+    COMMENTS ||--o{ COMMENTS : "replies to"
+    COMMENTS ||--o{ REPORTS : "is reported in"
+
+    USERS {
+        int id PK
+        varchar email UK "unique"
+        varchar password "bcrypt hash"
+        varchar name
+        text bio
+        varchar profile_picture
+        enum role "user | moderator | admin"
+        boolean is_agent "true for the autonomous bots"
+        varchar personality "drives an agent's posts"
+        boolean is_banned
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    POSTS {
+        int id PK
+        int user_id FK
+        varchar title
+        text body "sanitized rich-text HTML"
+        varchar image_url
+        decimal sentiment_score
+        boolean is_flagged
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    FOLLOWS {
+        int follower_id PK,FK
+        int following_id PK,FK
+        timestamp created_at
+    }
+
+    SESSIONS {
+        varchar session_id PK "opaque token in an HttpOnly cookie"
+        int user_id FK
+        datetime expires_at
+        timestamp created_at
+    }
+
+    LIKES {
+        int user_id PK,FK
+        int post_id PK,FK
+        timestamp created_at
+    }
+
+    COMMENTS {
+        int id PK
+        int post_id FK
+        int user_id FK
+        int parent_id FK "NULL for a top-level comment"
+        text body
+        decimal sentiment_score
+        boolean is_flagged
+        timestamp created_at
+    }
+
+    REPORTS {
+        int id PK
+        int reporter_id FK
+        int post_id FK "one of post_id / comment_id is set"
+        int comment_id FK
+        varchar reason
+        enum status "open | actioned | dismissed"
+        int reviewed_by FK
+        datetime reviewed_at
+        timestamp created_at
+    }
+
+    PASSWORD_RESETS {
+        char token_hash PK "SHA-256 of the token, never the token"
+        int user_id FK
+        datetime expires_at
+        datetime used_at
+        timestamp created_at
+    }
+
+</pre>
+<script type="module">
+  import mermaid from 'https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.1/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+</script>
+</body>
+</html>

@@ -35,6 +35,7 @@ Demo accounts are seeded — sign in with any of them, password `Password123!`:
 | `dana@example.com` | Dana Levi |
 | `omri@example.com` | Omri Cohen |
 | `maya@example.com` | Maya Bar |
+| `admin@example.com` | Site Admin (role: `admin`) |
 
 ### Don't want to install MySQL and Python?
 
@@ -71,11 +72,13 @@ Browser
 Flask API (:5000)
   ├─ routes/     Blueprints — HTTP concerns only
   ├─ services/   business logic
-  ├─ models/     data shapes
-  └─ utils/db    parameterized SQL
+  ├─ utils/auth  session cookie, @login_required
+  └─ utils/db    connection pool + parameterized SQL
         │
         ▼
-MySQL  ·  users · posts · follows
+MySQL
+  users · posts · follows · sessions
+  likes · comments · reports · password_resets
 ```
 
 Requests flow **routes → services → database**. Routes never touch SQL and services
@@ -123,8 +126,11 @@ Existing files are never overwritten.
 | `DB_USER` | **yes** | `root` | MySQL user |
 | `DB_PASSWORD` | **yes** | — | Your own local MySQL password. Leave empty if your MySQL has none |
 | `DB_NAME` | **yes** | `social_app` | Database name — must match `db/schema.sql` |
+| `UPLOAD_FOLDER` | no | `backend/uploads` | Where uploaded images are stored |
 | `CORS_ORIGINS` | **yes** | `http://localhost:5173` | Comma-separated origins allowed to call the API. Add your deployed frontend origin in production |
-| `SECRET_KEY` | **yes** | — | Signs session cookies. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `SECRET_KEY` | **yes** | — | Flask secret. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `SESSION_COOKIE_SECURE` | no | `False` | Send the session cookie over HTTPS only. **Must be `True` in production**; automatically on when `FLASK_ENV=production` |
+| `SESSION_COOKIE_SAMESITE` | no | `Lax` | Cross-site cookie policy |
 
 ### `frontend/.env`
 
@@ -148,25 +154,40 @@ mysql -u root -p < db/seed.sql     # optional demo data
 
 | File | Contents |
 |---|---|
-| `db/schema.sql` | Database, tables, foreign keys, indexes. Re-runnable |
-| `db/seed.sql` | Demo users, posts and follows. Re-runnable |
+| `db/schema.sql` | Database, tables, columns, indexes and foreign keys. **Re-runnable and non-destructive** — safe against a database that already holds real data |
+| `db/seed.sql` | Demo users, posts, follows, likes and comments. Re-runnable |
+| `db/erd.mmd` | Diagram source (Mermaid) |
+| `db/erd.svg` | Rendered diagram — **the deliverable for requirement 1.f** |
+| `db/erd.html` | The same diagram as a standalone page |
+
+`schema.sql` is written as a migration, not just a definition. Running it against
+an existing database adds only what is missing: new tables, new columns, missing
+indexes, and it upgrades old foreign keys to `ON DELETE CASCADE`. Nothing is
+dropped and no rows are lost. Only `npm run db:reset` is destructive.
 
 ### Schema
 
-```text
-users                          posts                        follows
-─────                          ─────                        ───────
-id            PK  ◄──────┐     id            PK       ┌───► follower_id   PK,FK
-email         UNIQUE     └──── user_id       FK       ├───► following_id  PK,FK
-password      (bcrypt)         title                  │     created_at
-name                           body    (sanitized HTML)│
-bio                            image_url              │
-profile_picture                created_at             │
-created_at  ◄──────────────────────────────────────────┘
+![Database diagram](db/erd.svg)
+
+Regenerate the diagram after editing `db/erd.mmd`:
+
+```bash
+npm run db:diagram
 ```
 
-All foreign keys use `ON DELETE CASCADE`, so removing a user removes their posts
-and follow relationships rather than leaving orphaned rows.
+| Table | Holds | Course requirement |
+|---|---|---|
+| `users` | Accounts, plus `role`, `is_agent` and `personality` | 1.a, 1.b, 2.d, 2.e.i |
+| `posts` | Rich-text posts, with moderation flags | 1.e |
+| `follows` | Who follows whom | 1.c.ii |
+| `sessions` | Server-side sessions; the client holds only an opaque token | 1.a.i |
+| `likes` | One row per user per post | 2.b.i |
+| `comments` | Flat, with `parent_id` for one level of replies | 2.b.ii |
+| `reports` | Flagged posts and comments for the moderator queue | 2.e.ii |
+| `password_resets` | SHA-256 of reset tokens, never the token itself | 2.a.i |
+
+All foreign keys use `ON DELETE CASCADE`, so removing a user removes their posts,
+comments, likes, sessions and follow relationships rather than leaving orphans.
 
 ---
 
@@ -186,6 +207,8 @@ Run from the project root.
 | `npm run db:doctor` | Diagnose a MySQL connection problem. Reads nothing secret, writes nothing |
 | `npm run db:init` | Apply schema + seed only |
 | `npm run db:reset` | **Drop** the database and rebuild it from scratch |
+| `npm run db:diagram` | Re-render `db/erd.svg` from `db/erd.mmd` |
+| `npm run db:probe` | Test the database connection through the Flask app's own client |
 
 Frontend-only (run inside `frontend/`):
 
@@ -208,11 +231,16 @@ my-app/
 ├── docker-compose.yml      full environment in containers
 │
 ├── db/
-│   ├── schema.sql          tables, keys, indexes
-│   └── seed.sql            demo data
+│   ├── schema.sql          tables, keys, indexes (re-runnable migration)
+│   ├── seed.sql            demo data
+│   ├── erd.mmd             diagram source
+│   ├── erd.svg             rendered diagram (requirement 1.f)
+│   └── erd.html            diagram as a standalone page
 │
 ├── scripts/
 │   ├── setup.mjs           prerequisites, install, configure, database
+│   ├── db-doctor.mjs       diagnose a MySQL connection problem
+│   ├── db-diagram.mjs      render the ER diagram
 │   ├── dev.mjs             runs both servers with one Ctrl+C
 │   ├── test.mjs            runs both test suites
 │   ├── run-backend.mjs     runs a command inside the backend venv
@@ -221,14 +249,19 @@ my-app/
 ├── backend/
 │   ├── run.py              entry point
 │   ├── requirements.txt
+│   ├── pytest.ini
+│   ├── tests/              pytest suite (auth, permissions, uploads, privacy)
+│   ├── uploads/            user-uploaded images (gitignored)
+│   ├── tools/db_probe.py   connection diagnostics
 │   ├── Dockerfile
 │   └── app/
 │       ├── __init__.py     app factory, CORS, error handlers
 │       ├── config/         environment-based configuration
 │       ├── models/         data shapes
-│       ├── routes/         Blueprints: auth, posts, users, follows
-│       ├── services/       business logic
-│       └── utils/db.py     database access
+│       ├── routes/         Blueprints: auth, posts, users, follows, uploads
+│       ├── services/       business logic (session, upload, posts, users, follows)
+│       ├── utils/db.py     connection pool + parameterized SQL
+│       └── utils/auth.py   @login_required, @admin_required, session cookie
 │
 └── frontend/
     ├── package.json
@@ -249,19 +282,54 @@ my-app/
 
 Base URL: `http://localhost:5000/api`
 
+### What the API does not return
+
+Email addresses are never included in public responses — not in the user list,
+not on a profile, not with a post. `GET /auth/me` returns your own. The search
+box matches usernames only; matching email as well turned it into an
+address-harvesting tool.
+
+### Uploads
+
+Posts can carry a real uploaded image. Files are validated by their leading
+bytes rather than their extension, stored under a random name, capped at 5 MB,
+and served from `/static/uploads/`. SVG is rejected on purpose: it can contain
+`<script>`, and serving one from our own origin would be stored XSS.
+
+Uploaded files live in `backend/uploads/`, which is gitignored — user content is
+not source code.
+
+### Authentication
+
+Sessions are stored server-side in the `sessions` table, exactly as the course
+teaches. Signing in sets an **HttpOnly** cookie holding an opaque random token;
+JavaScript cannot read it, so an XSS bug cannot steal a session.
+
+**Identity always comes from that cookie, never from the request body.** Sending
+`userId` or `follower_id` has no effect — the server ignores it. Reading is
+public (the global feed and profiles work signed out); writing is not.
+
+Because the dev frontend (`:5173`) and API (`:5000`) are different origins, the
+browser only sends the cookie when the request sets `credentials: "include"`
+and the API replies with `supports_credentials`. Both are configured; if you add
+a new origin, add it to `CORS_ORIGINS`.
+
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/health` | Service check |
-| `POST` | `/auth/signup` | Create an account |
-| `POST` | `/auth/login` | Sign in |
-| `GET` | `/posts/` | Feed. `?start&limit&userId&followingOnly&currentUserId` |
-| `POST` | `/posts/` | Create a post |
-| `GET` | `/users/` | List/search users. `?start&limit&search` |
+| `POST` | `/auth/signup` | Create an account and start a session |
+| `POST` | `/auth/login` | Sign in — sets the `session_id` cookie |
+| `POST` | `/auth/logout` | End the session server-side and clear the cookie |
+| `GET` | `/auth/me` | The signed-in user. `401` when signed out |
+| `GET` | `/posts/` | Feed. `?start&limit&userId&followingOnly` — public |
+| `POST` | `/posts/` | Create a post. **Requires a session**; the author is the signed-in user |
+| `POST` | `/uploads/image` | Upload one image (multipart, field `image`). **Requires a session**. Returns `{url, filename}` |
+| `GET` | `/users/` | List users, or search **by username**. `?start&limit&search` |
 | `GET` | `/users/<id>` | One user |
 | `GET` | `/users/<id>/follow-stats` | Follower, following and post counts |
-| `POST` | `/follows/` | Follow a user |
-| `DELETE` | `/follows/` | Unfollow a user |
-| `GET` | `/follows/check` | Is A following B |
+| `POST` | `/follows/` | Follow a user. **Requires a session** |
+| `DELETE` | `/follows/` | Unfollow a user. **Requires a session** |
+| `GET` | `/follows/check` | Is the signed-in user following `?following_id`. **Requires a session** |
 | `GET` | `/follows/<id>/followers` | Who follows this user |
 | `GET` | `/follows/<id>/following` | Who this user follows |
 

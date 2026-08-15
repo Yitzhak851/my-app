@@ -23,22 +23,8 @@ function Login() {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.trim(),
-          password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed");
-      }
-
-      login(data.user);
+      // Goes through api/api.js so the backend URL is configured in one place.
+      await login(email.trim(), password);
       navigate("/");
     } catch (err) {
       setError(err.message);

@@ -1,5 +1,4 @@
 from app.utils.db import Database
-from app.models import Follow
 
 
 class FollowService:
@@ -97,7 +96,7 @@ class FollowService:
         try:
             followers = Database.execute_query(
                 """
-                SELECT users.id, users.name, users.email, users.profile_picture
+                SELECT users.id, users.name, users.profile_picture
                 FROM users
                 JOIN follows ON users.id = follows.follower_id
                 WHERE follows.following_id = %s
@@ -121,7 +120,7 @@ class FollowService:
         try:
             following = Database.execute_query(
                 """
-                SELECT users.id, users.name, users.email, users.profile_picture
+                SELECT users.id, users.name, users.profile_picture
                 FROM users
                 JOIN follows ON users.id = follows.following_id
                 WHERE follows.follower_id = %s

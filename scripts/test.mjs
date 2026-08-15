@@ -25,7 +25,11 @@ if (venvReady()) {
     const r = run(venvPython(), ['-m', 'pytest'], { cwd: BACKEND })
     results.push(['backend', r.status === 0])
   } else {
-    warn('pytest is not installed yet — no backend tests to run')
+    // pytest is listed in requirements.txt, so this only happens when the venv
+    // predates that entry — i.e. setup has not run since the file changed.
+    warn('pytest is missing from the virtualenv')
+    console.log('    The backend test suite exists but cannot run. Install it with:')
+    console.log('        npm run setup')
     results.push(['backend', null])
   }
 } else {

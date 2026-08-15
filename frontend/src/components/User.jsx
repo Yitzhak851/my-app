@@ -14,29 +14,19 @@ function User({ user }) {
       <TableCell>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, }} >
           <Avatar src={user.profile_picture} alt={user.name} sx={{ width: 50, height: 50 }} />
-          <Box>
+          <Box sx={{ textAlign: "start" }}>
             <Typography fontWeight="bold">
-              {user.name}
+              {user.name || "Unknown user"}
             </Typography>
-            <Typography variant="body2" color="text.secondary" >
-              {user.email}
-            </Typography>
+            {user.bio && (
+              <Typography variant="body2" color="text.secondary">
+                {user.bio}
+              </Typography>
+            )}
           </Box>
         </Box>
       </TableCell>
-      {/* ======= Followers =======  */}
-      <TableCell>
-        <Typography>
-          Followers: {user.followers || 0}
-        </Typography>
-      </TableCell>
-      {/* ======= Following =======  */}
-      <TableCell>
-        <Typography>
-          Following: {user.following || 0}
-        </Typography>
-      </TableCell>
-      {/* ======= View profile =======  */}
+      {/* ======= View profile ======= */}
       <TableCell>
         <Button variant="contained" size="small" onClick={() => navigate(`/user/${user.id}`)} >
           View Profile

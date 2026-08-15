@@ -1,23 +1,28 @@
 from app.utils.db import Database
-from app.models import User
 
 
 class UsersService:
     """Service for managing users"""
     
+    # Email is deliberately absent from every public projection. It is not
+    # needed to display a user, and returning it made every address on the site
+    # readable — and searchable — by anyone, signed in or not.
+    PUBLIC_COLUMNS = "id, name, bio, profile_picture, role, is_agent, created_at"
+
     @staticmethod
     def fetch_users(start=0, limit=10, search=""):
-        """Fetch users with optional search"""
-        sql = """
-            SELECT id, email, name, bio, profile_picture, created_at
+        """List users, optionally filtered by username."""
+        sql = f"""
+            SELECT {UsersService.PUBLIC_COLUMNS}
             FROM users
         """
         params = []
-        
+
         if search:
-            sql += " WHERE name LIKE %s OR email LIKE %s"
-            search_term = f"%{search}%"
-            params.extend([search_term, search_term])
+            # Requirement 1.c.i is search BY USERNAME. Matching on email as well
+            # turned the search box into an address-harvesting tool.
+            sql += " WHERE name LIKE %s"
+            params.append(f"%{search}%")
         
         sql += " LIMIT %s OFFSET %s"
         params.extend([limit, start])
@@ -39,8 +44,8 @@ class UsersService:
         """Get user by ID"""
         try:
             user = Database.execute_query(
-                """
-                SELECT id, email, name, bio, profile_picture, created_at
+                f"""
+                SELECT {UsersService.PUBLIC_COLUMNS}
                 FROM users
                 WHERE id = %s
                 """,

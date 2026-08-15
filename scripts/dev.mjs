@@ -63,7 +63,15 @@ let shuttingDown = false
 let detectedFrontendUrl = null
 
 function start(name, cmd, args, cwd) {
-  const child = spawnLive(cmd, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+  // On Windows the npm shim runs inside cmd.exe. Left in this console's process
+  // group, Ctrl+C reaches cmd.exe directly and it asks "Terminate batch job
+  // (Y/N)?", which can leave the port held until the question is answered.
+  // detached puts it in its own group, so only our own taskkill stops it.
+  const child = spawnLive(cmd, args, {
+    cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    ...(IS_WINDOWS ? { detached: true, windowsHide: true } : {}),
+  })
   const tag = `${COLORS[name]}[${name}]${COLORS.reset}`
 
   for (const stream of [child.stdout, child.stderr]) {
@@ -94,8 +102,12 @@ function shutdown(code = 0) {
   for (const c of children) {
     if (c.exitCode !== null) continue
     // On Windows a plain kill() does not reach the whole process tree.
-    if (IS_WINDOWS) spawnLive('taskkill', ['/pid', String(c.pid), '/f', '/t'], { stdio: 'ignore' })
-    else c.kill('SIGTERM')
+    if (IS_WINDOWS) {
+      // /t kills the whole tree: cmd.exe, node, and anything they started.
+      spawnLive('taskkill', ['/pid', String(c.pid), '/f', '/t'], { stdio: 'ignore' })
+    } else {
+      c.kill('SIGTERM')
+    }
   }
   setTimeout(() => process.exit(code), 400)
 }

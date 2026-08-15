@@ -8,7 +8,6 @@ describe('SinglePost Component', () => {
     title: 'Test Post Title',
     body: 'This is a test post body',
     name: 'John Doe',
-    email: 'john@example.com',
     profile_picture: 'https://example.com/avatar.jpg',
     user_id: 1,
     created_at: '2024-01-01T00:00:00',
@@ -32,12 +31,10 @@ describe('SinglePost Component', () => {
     expect(nameElement).toBeTruthy();
   });
 
-  it('should fall back to the email when the post has no name', () => {
-    // SinglePost renders `post.name || post.email`, so the email only appears
-    // when name is absent. The previous version of this test asserted the
-    // impossible: that both render at once.
+  it('shows a neutral label when the post has no author name', () => {
+    // The feed no longer carries the author's email, so there is nothing
+    // private to fall back to.
     render(<SinglePost post={{ ...mockPost, name: null }} />);
-    const emailElement = screen.getByText(/john@example.com/i);
-    expect(emailElement).toBeTruthy();
+    expect(screen.getByText(/unknown user/i)).toBeTruthy();
   });
 });
