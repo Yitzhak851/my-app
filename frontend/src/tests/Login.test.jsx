@@ -19,7 +19,8 @@ describe('Login Component', () => {
       </BrowserRouter>
     );
 
-    const emailInput = screen.getByPlaceholderText(/email/i);
+    // MUI renders a <label>, not a placeholder.
+    const emailInput = screen.getByLabelText(/email/i);
     expect(emailInput).toBeTruthy();
   });
 
@@ -32,7 +33,7 @@ describe('Login Component', () => {
       </BrowserRouter>
     );
 
-    const passwordInput = screen.getByPlaceholderText(/password/i);
+    const passwordInput = screen.getByLabelText(/password/i);
     expect(passwordInput).toBeTruthy();
   });
 

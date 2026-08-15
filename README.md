@@ -159,10 +159,10 @@ FLASK_DEBUG=True
 PORT=5000
 DB_HOST=localhost
 DB_USER=root
-DB_PASSWORD=X0f2qq64g@@
+DB_PASSWORD=your-local-mysql-password
 DB_NAME=social_app
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-SECRET_KEY=social-app-secret-key-dev-only
+SECRET_KEY=change-me-generate-a-random-value
 ```
 
 ### 4. Database Setup

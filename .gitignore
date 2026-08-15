@@ -1,0 +1,40 @@
+# --- Secrets (never commit) ---
+.env
+.env.local
+*.pem
+
+# --- Node ---
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+ENV/
+
+# --- Testing / coverage ---
+coverage/
+htmlcov/
+.coverage
+.pytest_cache/
+cypress/videos/
+cypress/screenshots/
+
+# --- Uploaded user content (served at runtime, not source) ---
+backend/uploads/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Build/export artifacts ---
+_export.tgz

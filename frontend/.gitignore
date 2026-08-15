@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+cypress/videos/
+cypress/screenshots/
+
+# .env holds local overrides; .env.example is the committed template.
+.env
+.env.local
+*.local

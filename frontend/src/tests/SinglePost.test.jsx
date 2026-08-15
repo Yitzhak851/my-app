@@ -32,8 +32,11 @@ describe('SinglePost Component', () => {
     expect(nameElement).toBeTruthy();
   });
 
-  it('should render user email', () => {
-    render(<SinglePost post={mockPost} />);
+  it('should fall back to the email when the post has no name', () => {
+    // SinglePost renders `post.name || post.email`, so the email only appears
+    // when name is absent. The previous version of this test asserted the
+    // impossible: that both render at once.
+    render(<SinglePost post={{ ...mockPost, name: null }} />);
     const emailElement = screen.getByText(/john@example.com/i);
     expect(emailElement).toBeTruthy();
   });

@@ -3,10 +3,23 @@ import { createContext, useContext, useState } from "react";
 
 const AuthContext = createContext();
 
+// Reading the stored user must never throw: AuthProvider wraps the whole app, so an
+// exception here happens during the very first render and blanks the entire page.
+// localStorage can legitimately hold a corrupted value, and getItem() does not always
+// return null for "missing" (it is undefined under a mocked storage).
+function readStoredUser() {
+  try {
+    const raw = localStorage.getItem("currentUser");
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem("currentUser");
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(() => {
-    return JSON.parse(localStorage.getItem("currentUser"));
-  });
+  const [currentUser, setCurrentUser] = useState(readStoredUser);
 
   function login(userData) {
     localStorage.setItem(
