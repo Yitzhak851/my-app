@@ -250,6 +250,20 @@ if (!existsSync(schema)) {
       process.exit(1)
     }
     if (probe) ok('the Flask app can reach the database')
+
+    // The ten autonomous agents (requirement 2.d) need accounts before the
+    // simulation has anything to run.
+    const seedAgents = runDbProbe.name && venvReady()
+      ? run(venvPython(), [join(BACKEND, 'tools', 'seed_agents.py')],
+            { cwd: BACKEND, stdio: 'pipe', encoding: 'utf8' })
+      : null
+    if (seedAgents && seedAgents.status === 0) {
+      const line = `${seedAgents.stdout || ''}`.trim().split(/\r?\n/).pop()
+      ok(line || 'agent accounts ready')
+    } else if (seedAgents) {
+      warn('could not create the agent accounts')
+      dim('    Run it directly to see why:  npm run agents:seed')
+    }
   }
 }
 

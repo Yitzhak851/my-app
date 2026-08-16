@@ -66,7 +66,12 @@ def create_comment(post_id):
             parent_id=data.get('parent_id'),
         )
         if result['success']:
-            return jsonify({'comment': result['comment']}), 201
+            # Tell the author their comment was held for review. Hiding it would
+            # leave them wondering why nobody replied.
+            return jsonify({
+                'comment': result['comment'],
+                'flagged': result.get('flagged', False),
+            }), 201
         return jsonify({'error': result['error']}), result.get('status', 400)
     except Exception:
         return jsonify({'error': 'Could not post the comment'}), 500

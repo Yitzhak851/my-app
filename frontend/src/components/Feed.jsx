@@ -1,7 +1,7 @@
 // my-YBO-app/src/components/Feed.jsx
 
-import { useEffect, useState } from "react";
-import { Box, Button, CircularProgress, Typography } from "@mui/material";
+import { useEffect, useRef, useState } from "react";
+import { Alert, Box, Button, CircularProgress, Typography } from "@mui/material";
 import { useParams } from "react-router-dom";
 import SinglePost from "./SinglePost";
 import ViewModeToggle from "./ViewModeToggle";
@@ -18,8 +18,15 @@ function Feed() {
   const [viewMode, setViewMode] = useState(VIEW_MODES.GRID);
   const [feedFilter, setFeedFilter] = useState("all");
   const [hasMore, setHasMore] = useState(true);
+  const [error, setError] = useState("");
 
   const { currentUser } = useAuth();
+
+  // A request that was cut short because the page is going away is not a
+  // failure anyone needs to be told about — and the component is gone, so
+  // setting state on it is pointless.
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
 
   async function loadPosts(reset = false) {
     try {
@@ -27,6 +34,7 @@ function Feed() {
       if (!reset && !hasMore) return;
 
       setLoading(true);
+      setError("");
 
       const currentStart = reset ? 0 : start;
       const limit = 10;
@@ -46,9 +54,12 @@ function Feed() {
       setStart(currentStart + newPosts.length);
       setHasMore(newPosts.length === limit);
     } catch (err) {
-      console.error("Failed to load posts:", err);
+      if (!mounted.current) return;
+      // The feed used to swallow this into console.error, so a backend that was
+      // down produced a blank page with no explanation and no way to retry.
+      setError(err.message || "Could not load posts");
     } finally {
-      setLoading(false);
+      if (mounted.current) setLoading(false);
     }
   }
 
@@ -117,6 +128,20 @@ function Feed() {
         </Box>
       )}
 
+      {error && (
+        <Alert
+          severity="error"
+          sx={{ mb: 3 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => loadPosts(true)}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
+      )}
+
       <ViewModeToggle value={viewMode} onChange={setViewMode} sx={{ mb: 3 }} />
 
       <Box
@@ -135,6 +160,12 @@ function Feed() {
         <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
           <CircularProgress />
         </Box>
+      )}
+
+      {!loading && !error && posts.length === 0 && (
+        <Typography align="center" color="text.secondary" sx={{ mt: 4 }}>
+          אין עדיין פוסטים להצגה
+        </Typography>
       )}
 
       {!loading && !hasMore && posts.length > 0 && (

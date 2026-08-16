@@ -54,6 +54,8 @@ services:
       SESSION_COOKIE_SAMESITE: Lax
       FRONTEND_URL: http://localhost:5173
       MAIL_BACKEND: console
+      AI_PROVIDER: local
+      AGENTS_ENABLED: "True"
     ports:
       - "5000:5000"
     volumes:

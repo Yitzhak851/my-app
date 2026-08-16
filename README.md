@@ -135,6 +135,9 @@ Existing files are never overwritten.
 | `MAIL_BACKEND` | no | `console` | `console` \| `file` \| `smtp`. The default needs no mail server — reset links are printed to the server log |
 | `MAIL_FROM` | no | `no-reply@ybo-social.local` | Sender address |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_USE_TLS` | no | — | Only used when `MAIL_BACKEND=smtp` |
+| `AI_PROVIDER` | no | `local` | Backs generation, autocorrect and sentiment. `local` needs no API key |
+| `AGENTS_ENABLED` | no | `True` | Run the ten autonomous agents |
+| `AGENT_TICK_SECONDS` | no | `45` | Seconds between agent actions |
 
 ### `frontend/.env`
 
@@ -206,24 +209,86 @@ Run from the project root.
 | `npm run setup -- --reinstall` | Force a clean `npm ci`, e.g. after a broken install |
 | `npm run dev` | Run backend + frontend together (assumes setup is done) |
 | `npm run doctor` | Check prerequisites only. Changes nothing |
-| `npm test` | Run both test suites |
+| `npm test` | Run both test suites, with coverage, and fail if either drops below 85% |
 | `npm run build` | Production build of the frontend into `frontend/dist` |
 | `npm run db:doctor` | Diagnose a MySQL connection problem. Reads nothing secret, writes nothing |
 | `npm run db:init` | Apply schema + seed only |
 | `npm run db:reset` | **Drop** the database and rebuild it from scratch |
 | `npm run db:diagram` | Re-render `db/erd.svg` from `db/erd.mmd` |
 | `npm run db:probe` | Test the database connection through the Flask app's own client |
+| `npm run agents:seed` | Create the ten agent accounts. Run automatically by setup |
+| `npm run verify` | Walk the running app in a real browser, 33 checks. Needs the servers up and `npm i -D playwright` |
 
 Frontend-only (run inside `frontend/`):
 
 | Command | What it does |
 |---|---|
 | `npm run dev` | Vite dev server |
-| `npm run test` | Vitest, once |
+| `npm run test` | Vitest with coverage (fails under the thresholds) |
+| `npm run test:fast` | Vitest without coverage — quicker while writing a test |
 | `npm run test:watch` | Vitest, watch mode |
 | `npm run test:coverage` | Vitest with a coverage report |
 | `npm run test:e2e` | Cypress end-to-end tests |
 | `npm run lint` | ESLint |
+
+---
+
+## Testing
+
+```bash
+npm test          # both suites, with coverage, from the project root
+```
+
+| Suite | Tests | Statement coverage |
+|---|---|---|
+| Backend (pytest) | 302 | 94% |
+| Frontend (Vitest + React Testing Library) | 208 | 90% |
+| **Total** | **510** | — |
+
+Course requirement 2.f asks for 85%. The threshold is enforced rather than
+reported: `backend/pytest.ini` sets `--cov-fail-under=85` and
+`frontend/vitest.config.js` sets coverage thresholds, so coverage dropping
+below the target turns the run red. `npm test` prints both numbers in its
+summary.
+
+**What the tests are for.** Each one is named after the behaviour it protects,
+and where a test exists because something actually broke, the comment says what
+broke. A few examples:
+
+- `backend/tests/test_cors.py` — reads the verbs the app's own URL map declares
+  and requires each to survive a preflight. PATCH was missing from the CORS
+  allow-list, so the Dismiss button in the moderation dashboard did nothing:
+  server healthy, endpoint fine from curl, unit tests green, nothing in the log.
+- `backend/tests/test_error_paths.py` — one property applied to every endpoint:
+  during a database outage, answer cleanly and say nothing about MySQL, the
+  schema or the SQL. It found four endpoints returning `str(exception)`.
+- `backend/tests/test_db_pool.py` — drives the real pool against a fake driver,
+  including 20 concurrent operations, because a single shared connection is what
+  produced `2014 (HY000): Commands out of sync`.
+- `frontend/src/tests/apiClient.test.js` — one row per exported call, checking
+  the verb, the URL and that `credentials: "include"` is set. A dropped
+  credentials flag is invisible until something needs authentication.
+
+**Database in the backend suite.** `backend/tests/conftest.py` swaps the
+`Database.execute_*` entry points for an in-memory fake, so routes, services and
+decorators all run for real with no MySQL server, no fixture data to reset and
+no ordering between tests.
+
+### The browser walkthrough
+
+The suites above mock the network. `npm run verify` does not — it drives
+Chromium against the running servers and the real database, and it is what
+catches the bugs that only exist once the pieces are wired together.
+
+```bash
+npm i -D playwright && npx playwright install chromium   # once
+npm start                                                # in one terminal
+npm run verify                                           # in another
+```
+
+33 checks: sign up, publish, like, comment, follow, report, moderate, ban,
+the agents, grid layout, phone width, and sign-out. Each prints PASS or FAIL and
+the script exits non-zero if any fail.
 
 ---
 
@@ -246,15 +311,19 @@ my-app/
 │   ├── db-doctor.mjs       diagnose a MySQL connection problem
 │   ├── db-diagram.mjs      render the ER diagram
 │   ├── dev.mjs             runs both servers with one Ctrl+C
-│   ├── test.mjs            runs both test suites
+│   ├── test.mjs            runs both test suites with coverage
 │   ├── run-backend.mjs     runs a command inside the backend venv
 │   └── lib/env.mjs         shared helpers (no npm dependencies)
+│
+├── tools/
+│   └── regression.mjs      the browser walkthrough — npm run verify
 │
 ├── backend/
 │   ├── run.py              entry point
 │   ├── requirements.txt
 │   ├── pytest.ini
-│   ├── tests/              pytest suite (auth, permissions, uploads, privacy)
+│   ├── tests/              pytest suite (auth, permissions, uploads, privacy,
+│   │                       moderation, AI, the pool, CORS, outage behaviour)
 │   ├── uploads/            user-uploaded images (gitignored)
 │   ├── tools/db_probe.py   connection diagnostics
 │   ├── Dockerfile
@@ -265,6 +334,7 @@ my-app/
 │       ├── routes/         Blueprints: auth, posts, users, follows, uploads
 │       ├── services/       business logic (session, upload, posts, users, follows)
 │       ├── utils/db.py     connection pool + parameterized SQL
+│       ├── utils/errors.py log the real cause, return a safe message
 │       └── utils/auth.py   @login_required, @admin_required, session cookie
 │
 └── frontend/
@@ -292,6 +362,35 @@ Email addresses are never included in public responses — not in the user list,
 not on a profile, not with a post. `GET /auth/me` returns your own. The search
 box matches usernames only; matching email as well turned it into an
 address-harvesting tool.
+
+### Moderation and AI
+
+**Reporting and roles.** Anyone signed in can report a post or a comment.
+`users.role` is one of `user`, `moderator` or `admin`: moderators work the
+queue, ban accounts and delete content; only admins hand out roles. The
+dashboard is at `/admin`, and the server enforces the same rules the UI does.
+
+**Sentiment.** Posts and comments are scored when they are written. Content
+that reads as an attack on a person is flagged for review — it is still
+published, and a moderator decides. Ordinary negativity is deliberately **not**
+flagged: "this build failed and it's awful" is frustration with software, and a
+queue full of that is a queue nobody reads.
+
+The scorer is a lexicon, not a model. It catches blunt hostility in English and
+nothing subtler, which is exactly why a flag is a hint rather than a verdict,
+and why the report button exists alongside it.
+
+**Agents.** Ten accounts with distinct personalities post, reply and like on a
+timer, driven by the `personality` stored on their user row. They run inside the
+backend process — no second service to start.
+
+**Writing help.** The composer offers a draft, a spelling pass and a tone check.
+All three are suggestions; none of them rewrite anything on their own or block
+publishing.
+
+All of it runs through one `AIProvider` interface with a local, template-based
+implementation. Swapping in a hosted model means adding one subclass and setting
+`AI_PROVIDER` — nothing that calls it changes.
 
 ### Password reset
 
@@ -354,6 +453,17 @@ a new origin, add it to `CORS_ORIGINS`.
 | `GET` | `/posts/<id>/comments` | Comments on a post — public |
 | `POST` | `/posts/<id>/comments` | Add a comment. **Requires a session** |
 | `DELETE` | `/comments/<id>` | Delete your own comment; moderators may delete any |
+| `POST` | `/reports` | Flag a post or comment. **Requires a session** |
+| `GET` | `/moderation/queue` | Open reports. **Moderators** |
+| `GET` | `/moderation/flagged` | Automatically held content. **Moderators** |
+| `PATCH` | `/moderation/reports/<id>` | Close a report. **Moderators** |
+| `DELETE` | `/moderation/posts/<id>` | Remove a post. **Moderators** |
+| `POST` | `/moderation/users/<id>/ban` | Ban or unban. **Moderators** |
+| `POST` | `/moderation/users/<id>/role` | Change a role. **Admins only** |
+| `POST` | `/ai/autocorrect` | Spelling suggestions |
+| `POST` | `/ai/generate-post` | A draft to start from |
+| `GET` | `/ai/suggest-comments/<id>` | Reply suggestions for a post |
+| `POST` | `/ai/analyze` | Tone check before publishing |
 
 ---
 

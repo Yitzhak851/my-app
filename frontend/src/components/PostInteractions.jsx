@@ -9,6 +9,7 @@ import { useState } from "react";
 import {
   Box,
   Button,
+  Chip,
   CircularProgress,
   Divider,
   IconButton,
@@ -23,10 +24,12 @@ import {
   createComment,
   deleteComment,
   fetchComments,
+  fetchCommentSuggestions,
   likePost,
   unlikePost,
 } from "../api/api";
 import { timeAgo } from "./timeAgo";
+import ReportButton from "./ReportButton";
 
 const MAX_COMMENT_LENGTH = 1000;
 
@@ -44,6 +47,8 @@ function PostInteractions({ post }) {
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [notice, setNotice] = useState("");
 
   const canModerate = ["admin", "moderator"].includes(currentUser?.role);
 
@@ -88,6 +93,17 @@ function PostInteractions({ post }) {
       } finally {
         setLoadingComments(false);
       }
+
+      // Reply suggestions (requirement 2.c). Best-effort: if this fails the
+      // comment box still works, it just has no shortcuts above it.
+      if (isLoggedIn) {
+        try {
+          const { suggestions: list } = await fetchCommentSuggestions(post.id);
+          setSuggestions(Array.isArray(list) ? list : []);
+        } catch {
+          setSuggestions([]);
+        }
+      }
     }
   }
 
@@ -99,10 +115,13 @@ function PostInteractions({ post }) {
     setPosting(true);
     setError("");
     try {
-      const { comment } = await createComment(post.id, body);
+      const { comment, flagged } = await createComment(post.id, body);
       setComments((prev) => [...(prev || []), comment]);
       setCommentCount((n) => n + 1);
       setDraft("");
+      // The comment is published either way; the author simply deserves to know
+      // a moderator will look at it.
+      setNotice(flagged ? "Posted — a moderator will review this one." : "");
     } catch (err) {
       setError(err.message || "Could not post the comment");
     } finally {
@@ -139,6 +158,11 @@ function PostInteractions({ post }) {
           {likeCount}
         </Typography>
 
+        <Box sx={{ flexGrow: 1 }} />
+        <ReportButton postId={post.id} />
+      </Box>
+
+      <Box sx={{ display: "flex", alignItems: "center" }}>
         <Button
           onClick={toggleComments}
           startIcon={<ChatBubbleOutlineIcon fontSize="small" />}
@@ -159,6 +183,12 @@ function PostInteractions({ post }) {
       {error && (
         <Typography variant="body2" color="error" sx={{ mt: 1 }}>
           {error}
+        </Typography>
+      )}
+
+      {notice && (
+        <Typography variant="body2" color="warning.main" sx={{ mt: 1 }}>
+          {notice}
         </Typography>
       )}
 
@@ -186,21 +216,42 @@ function PostInteractions({ post }) {
                 {comment.body}
               </Typography>
 
-              {(comment.user_id === currentUser?.id || canModerate) && (
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={() => handleDelete(comment.id)}
-                  sx={{ textTransform: "none", p: 0, minWidth: 0 }}
-                >
-                  Delete
-                </Button>
-              )}
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                {(comment.user_id === currentUser?.id || canModerate) && (
+                  <Button
+                    size="small"
+                    color="error"
+                    onClick={() => handleDelete(comment.id)}
+                    sx={{ textTransform: "none", p: 0, minWidth: 0 }}
+                  >
+                    Delete
+                  </Button>
+                )}
+                <ReportButton commentId={comment.id} />
+              </Box>
             </Box>
           ))}
 
           {isLoggedIn && (
             <Box component="form" onSubmit={handleSubmitComment} sx={{ mt: 2 }}>
+              {suggestions.length > 0 && !draft && (
+                <Box sx={{ mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Suggested replies:
+                  </Typography>
+                  <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }}>
+                    {suggestions.map((text) => (
+                      <Chip
+                        key={text}
+                        label={text}
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setDraft(text)}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              )}
               <TextField
                 fullWidth
                 multiline

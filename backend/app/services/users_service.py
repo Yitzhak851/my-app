@@ -1,4 +1,5 @@
 from app.utils.db import Database
+from app.utils.errors import failure
 
 
 class UsersService:
@@ -34,10 +35,8 @@ class UsersService:
                 'users': users
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('users_service.fetch_users', e,
+                           'Could not load users')
     
     @staticmethod
     def get_user_by_id(user_id):
@@ -64,10 +63,8 @@ class UsersService:
                 'user': user
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('users_service.get_user_by_id', e,
+                           'Could not load this user')
     
     @staticmethod
     def get_user_follow_stats(user_id):
@@ -101,7 +98,5 @@ class UsersService:
                 'posts': posts['count']
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('users_service.get_user_follow_stats', e,
+                           'Could not load these statistics')

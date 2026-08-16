@@ -32,28 +32,53 @@ describe('SinglePost Component', () => {
     created_at: '2024-01-01T00:00:00',
   };
 
-  it('should render post title', () => {
+  it('renders the title, the body and the author', () => {
     renderPost(mockPost);
-    const titleElement = screen.getByText('Test Post Title');
-    expect(titleElement).toBeTruthy();
-  });
 
-  it('should render post body content', () => {
-    renderPost(mockPost);
-    const bodyElement = screen.getByText(/This is a test post body/i);
-    expect(bodyElement).toBeTruthy();
-  });
-
-  it('should render user name', () => {
-    renderPost(mockPost);
-    const nameElement = screen.getByText(/John Doe/i);
-    expect(nameElement).toBeTruthy();
+    expect(screen.getByText('Test Post Title')).toBeInTheDocument();
+    expect(screen.getByText(/This is a test post body/i)).toBeInTheDocument();
+    expect(screen.getByText(/John Doe/i)).toBeInTheDocument();
   });
 
   it('shows a neutral label when the post has no author name', () => {
     // The feed no longer carries the author's email, so there is nothing
     // private to fall back to.
     renderPost({ ...mockPost, name: null });
-    expect(screen.getByText(/unknown user/i)).toBeTruthy();
+
+    expect(screen.getByText(/unknown user/i)).toBeInTheDocument();
+  });
+
+  it("never renders the author's email address", () => {
+    // The feed projection used to include it, so every post published the
+    // author's address to anyone who could read the page.
+    renderPost({ ...mockPost, email: 'john@example.com' });
+
+    expect(screen.queryByText(/john@example.com/i)).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('@example.com');
+  });
+
+  it('renders the body as HTML, not as escaped markup', () => {
+    // The composer stores Quill's HTML; showing the tags as text would make
+    // every formatted post unreadable.
+    renderPost({ ...mockPost, body: '<p>bold <strong>bit</strong></p>' });
+
+    expect(screen.getByText('bit').tagName).toBe('STRONG');
+  });
+
+  it('strips script out of a post body before rendering it', () => {
+    // Stored XSS: the body is written by another user and rendered with
+    // dangerouslySetInnerHTML, so it has to be sanitised first.
+    renderPost({ ...mockPost, body: '<p>hi</p><script>window.pwned = 1</script>' });
+
+    expect(document.body.innerHTML).not.toContain('<script>');
+    expect(window.pwned).toBeUndefined();
+  });
+
+  it('shows when the post was written, not a raw timestamp', () => {
+    const minutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+
+    renderPost({ ...mockPost, created_at: minutesAgo });
+
+    expect(screen.getByText(/לפני 5 דקות/)).toBeInTheDocument();
   });
 });

@@ -1,12 +1,33 @@
 import bcrypt
 import re
 from app.utils.db import Database
+from app.utils.errors import failure
 
 
 class AuthService:
     """Authentication service for user registration and login"""
     
     EMAIL_REGEX = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+
+    @staticmethod
+    def public_self(row):
+        """
+        The one shape used for "this is you", everywhere.
+
+        Login, signup and /auth/me must agree field for field. They did not:
+        login left out `role`, so a moderator who had just signed in had no role
+        on the client and the Moderation link stayed hidden until they happened
+        to refresh the page. One projection, three callers, no drift.
+        """
+        return {
+            'id': row['id'],
+            'email': row['email'],
+            'name': row.get('name'),
+            'bio': row.get('bio'),
+            'profile_picture': row.get('profile_picture'),
+            'role': row.get('role', 'user'),
+            'is_agent': bool(row.get('is_agent', False)),
+        }
 
     # Long enough that bcrypt's cost actually protects the account. Length is
     # the only rule: composition rules ("must contain a symbol") push people
@@ -86,19 +107,19 @@ class AuthService:
             
             return {
                 'success': True,
-                'user': {
+                'user': AuthService.public_self({
                     'id': user_id,
                     'email': normalized_email,
                     'name': display_name,
                     'bio': 'New user',
-                    'profile_picture': profile_picture
-                }
+                    'profile_picture': profile_picture,
+                    'role': 'user',
+                    'is_agent': False,
+                })
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('auth_service.signup', e,
+                           'Could not create the account')
     
     @staticmethod
     def login(email, password):
@@ -126,19 +147,8 @@ class AuthService:
                     'error': 'Invalid credentials'
                 }
             
-            # Return user data (exclude password)
-            return {
-                'success': True,
-                'user': {
-                    'id': user['id'],
-                    'email': user['email'],
-                    'name': user['name'],
-                    'bio': user['bio'],
-                    'profile_picture': user['profile_picture']
-                }
-            }
+            # Never the password hash — public_self decides what leaves here.
+            return {'success': True, 'user': AuthService.public_self(user)}
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('auth_service.login', e,
+                           'Could not sign in')

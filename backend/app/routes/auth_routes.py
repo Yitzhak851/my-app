@@ -135,5 +135,8 @@ def me():
 
     The frontend calls this on load instead of trusting its own localStorage,
     so a session revoked on the server takes effect on the next page load.
+
+    Goes through the same projection as login and signup, so all three return
+    an identical shape and the client never has to wonder which fields it got.
     """
-    return jsonify({'user': current_user()}), 200
+    return jsonify({'user': AuthService.public_self(current_user())}), 200

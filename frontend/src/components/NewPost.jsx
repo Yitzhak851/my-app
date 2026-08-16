@@ -20,7 +20,13 @@ import {
   Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { createPost, uploadImage } from "../api/api";
+import {
+  analyzeText,
+  autocorrectText,
+  createPost,
+  generatePostDraft,
+  uploadImage,
+} from "../api/api";
 import Quill from "quill";
 import "quill/dist/quill.snow.css";
 
@@ -41,6 +47,9 @@ function NewPost() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNotice, setAiNotice] = useState("");
+  const [toneWarning, setToneWarning] = useState(null);
 
   useEffect(() => {
     if (editorRef.current && !quillRef.current) {
@@ -69,6 +78,67 @@ function NewPost() {
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
     };
   }, []);
+
+  // ── writing help (requirement 2.c) ──────────────────────────────────────
+  // Every one of these is a suggestion. Nothing rewrites the text without the
+  // person pressing a button, and nothing blocks publishing.
+
+  async function handleAutocorrect() {
+    const plain = quillRef.current?.getText() || "";
+    if (!plain.trim()) return;
+
+    setAiBusy(true);
+    setAiNotice("");
+    try {
+      const { corrected, changes } = await autocorrectText(plain);
+      if (!changes?.length) {
+        setAiNotice("No spelling suggestions — looks clean.");
+      } else {
+        quillRef.current.setText(corrected);
+        setBody(quillRef.current.root.innerHTML);
+        setAiNotice(
+          `Fixed ${changes.length}: ` +
+            changes.slice(0, 5).map((c) => `${c.from} → ${c.to}`).join(", ") +
+            (changes.length > 5 ? "..." : "")
+        );
+      }
+    } catch {
+      setAiNotice("Suggestions are unavailable right now.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function handleGenerateDraft() {
+    setAiBusy(true);
+    setAiNotice("");
+    try {
+      const draft = await generatePostDraft();
+      if (!title.trim()) setTitle(draft.title);
+      quillRef.current?.clipboard.dangerouslyPasteHTML(draft.body);
+      setBody(quillRef.current?.root.innerHTML || draft.body);
+      setAiNotice("Draft inserted — edit it into your own words.");
+    } catch {
+      setAiNotice("Could not generate a draft right now.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function handleCheckTone() {
+    const plain = quillRef.current?.getText() || "";
+    setAiBusy(true);
+    setAiNotice("");
+    try {
+      const result = await analyzeText(`${title} ${plain}`);
+      setToneWarning(result.is_toxic ? result : null);
+      if (!result.is_toxic) setAiNotice("Tone check passed.");
+    } catch {
+      setToneWarning(null);
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   function handleFileChange(event) {
     const file = event.target.files?.[0];
@@ -203,6 +273,32 @@ function NewPost() {
             <Typography align="center" fontWeight="bold" sx={{ mb: 1 }}>
               Body
             </Typography>
+
+            <Box sx={{ display: "flex", gap: 1, justifyContent: "center", flexWrap: "wrap", mb: 1 }}>
+              <Button size="small" onClick={handleGenerateDraft} disabled={aiBusy}>
+                Suggest a draft
+              </Button>
+              <Button size="small" onClick={handleAutocorrect} disabled={aiBusy}>
+                Fix spelling
+              </Button>
+              <Button size="small" onClick={handleCheckTone} disabled={aiBusy}>
+                Check tone
+              </Button>
+            </Box>
+
+            {aiNotice && (
+              <Alert severity="info" sx={{ mb: 2 }} onClose={() => setAiNotice("")}>
+                {aiNotice}
+              </Alert>
+            )}
+
+            {toneWarning && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                This reads as hostile{toneWarning.matches?.length
+                  ? ` (${toneWarning.matches.join(", ")})`
+                  : ""}. You can still publish it, but a moderator will see it.
+              </Alert>
+            )}
             <Box
               sx={{
                 mb: 2,

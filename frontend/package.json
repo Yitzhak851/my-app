@@ -8,11 +8,12 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "cypress run"
+    "test:e2e": "cypress run",
+    "test:fast": "vitest run"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

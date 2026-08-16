@@ -233,3 +233,41 @@ def test_errors_do_not_leak_internal_details(db, client):
     body = res.get_data(as_text=True).lower()
     for leak in ('traceback', 'mysql', 'sql', 'select '):
         assert leak not in body
+
+
+# ─────────────────────────────────── the three shapes must agree ────────────
+
+def test_login_returns_the_same_fields_as_me(db, client):
+    """
+    Login used to omit `role`, so a moderator who had just signed in had no
+    role on the client and the Moderation link stayed hidden until they
+    refreshed. Three endpoints describing "you" must not disagree.
+    """
+    db.add_user(email='mod@example.com', password_hash=_hash('Password123!'), role='moderator')
+
+    login = client.post('/api/auth/login',
+                        json={'email': 'mod@example.com', 'password': 'Password123!'})
+    me = client.get('/api/auth/me')
+
+    assert set(login.json['user']) == set(me.json['user'])
+    assert login.json['user']['role'] == 'moderator'
+
+
+def test_signup_returns_the_same_fields_as_me(db, client):
+    signup = client.post('/api/auth/signup',
+                         json={'email': 'new@example.com', 'password': 'Password123!'})
+    me = client.get('/api/auth/me')
+
+    assert set(signup.json['user']) == set(me.json['user'])
+    assert signup.json['user']['role'] == 'user'
+
+
+def test_no_endpoint_ever_returns_the_password_hash(db, client):
+    db.add_user(email='dana@example.com', password_hash=_hash('Password123!'))
+
+    login = client.post('/api/auth/login',
+                        json={'email': 'dana@example.com', 'password': 'Password123!'})
+
+    assert 'password' not in login.json['user']
+    assert '$2b$' not in login.get_data(as_text=True)
+    assert '$2b$' not in client.get('/api/auth/me').get_data(as_text=True)

@@ -8,6 +8,9 @@ from .likes_service import LikesService
 from .comments_service import CommentsService
 from .mail_service import MailService
 from .password_reset_service import PasswordResetService
+from .moderation_service import ModerationService
+from .agent_service import AgentService
 
 __all__ = ['AuthService', 'PostsService', 'UsersService', 'FollowService', 'SessionService', 'UploadService',
-           'LikesService', 'CommentsService', 'MailService', 'PasswordResetService']
+           'LikesService', 'CommentsService', 'MailService', 'PasswordResetService',
+           'ModerationService', 'AgentService']

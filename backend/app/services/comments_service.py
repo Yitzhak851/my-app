@@ -1,3 +1,4 @@
+from app.services.ai import sentiment
 from app.utils.db import Database
 
 MAX_COMMENT_LENGTH = 1000
@@ -61,12 +62,18 @@ class CommentsService:
             if not parent or parent['post_id'] != int(post_id):
                 return {'success': False, 'error': 'Parent comment not found', 'status': 400}
 
+        # Comments are the easiest place for a stranger to be hostile, so they
+        # are scored too and flagged for review when they read as an attack.
+        analysis = sentiment.analyze(text)
+
         comment_id = Database.execute_update(
             """
-            INSERT INTO comments (post_id, user_id, parent_id, body)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO comments (post_id, user_id, parent_id, body,
+                                  sentiment_score, is_flagged)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (post_id, user_id, parent_id, text),
+            (post_id, user_id, parent_id, text,
+             analysis['score'], analysis['is_toxic']),
         )
 
         created = Database.execute_query(
@@ -81,7 +88,7 @@ class CommentsService:
             (comment_id,),
             fetch_one=True,
         )
-        return {'success': True, 'comment': created}
+        return {'success': True, 'comment': created, 'flagged': analysis['is_toxic']}
 
     @staticmethod
     def delete(comment_id, actor):

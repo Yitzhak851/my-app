@@ -1,4 +1,5 @@
 from app.utils.db import Database
+from app.utils.errors import failure
 
 
 class FollowService:
@@ -40,10 +41,8 @@ class FollowService:
                 'message': 'User followed successfully'
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('follow_service.follow_user', e,
+                           'Could not follow this user')
     
     @staticmethod
     def unfollow_user(follower_id, following_id):
@@ -62,10 +61,8 @@ class FollowService:
                 'message': 'User unfollowed successfully'
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('follow_service.unfollow_user', e,
+                           'Could not unfollow this user')
     
     @staticmethod
     def check_if_following(follower_id, following_id):
@@ -85,10 +82,8 @@ class FollowService:
                 'is_following': result is not None
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('follow_service.check_if_following', e,
+                           'Could not check the follow status')
     
     @staticmethod
     def get_followers(user_id):
@@ -109,10 +104,8 @@ class FollowService:
                 'followers': followers
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('follow_service.get_followers', e,
+                           'Could not load the followers')
     
     @staticmethod
     def get_following(user_id):
@@ -133,7 +126,5 @@ class FollowService:
                 'following': following
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('follow_service.get_following', e,
+                           'Could not load the following list')

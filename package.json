@@ -16,7 +16,9 @@
     "build": "node scripts/build.mjs",
     "doctor": "node scripts/setup.mjs --check-only",
     "db:probe": "node scripts/run-backend.mjs tools/db_probe.py",
-    "db:diagram": "node scripts/db-diagram.mjs"
+    "db:diagram": "node scripts/db-diagram.mjs",
+    "agents:seed": "node scripts/run-backend.mjs tools/seed_agents.py",
+    "verify": "node tools/regression.mjs"
   },
   "engines": {
     "node": ">=18"

@@ -2,7 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 from app.config import get_config
 from app.routes import (auth_bp, posts_bp, users_bp, follow_bp, upload_bp,
-                        interactions_bp)
+                        interactions_bp, moderation_bp, ai_bp)
 
 
 def create_app():
@@ -35,7 +35,15 @@ def create_app():
     CORS(app, resources={
         r"/api/*": {
             "origins": app.config['CORS_ORIGINS'],
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            # Every verb the API actually answers, and nothing else. PATCH was
+            # missing, so the preflight for it came back without an
+            # Access-Control-Allow-Methods header and the browser refused to
+            # send the request. The only PATCH endpoint is
+            # /api/moderation/reports/<id>, which is why the symptom was
+            # "the Dismiss button in the dashboard does nothing" — with a
+            # working server, a passing unit test, and nothing in the log.
+            # PUT was listed and is not used by any route.
+            "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type"],
             "supports_credentials": True,
         }
@@ -48,6 +56,8 @@ def create_app():
     app.register_blueprint(follow_bp)
     app.register_blueprint(upload_bp)
     app.register_blueprint(interactions_bp)
+    app.register_blueprint(moderation_bp)
+    app.register_blueprint(ai_bp)
     
     # Health check endpoint
     @app.route('/')
@@ -72,6 +82,11 @@ def create_app():
     def internal_error(error):
         return {'error': 'Internal server error'}, 500
     
+    # The autonomous agents (requirement 2.d). Started here so it runs with the
+    # app rather than needing a second process to be launched by hand.
+    from app.agents_runner import start as start_agents
+    start_agents(app)
+
     # Connections come from a pool and are returned by the code that borrowed
     # them, so there is nothing to tear down per request. The previous version
     # closed a process-wide shared connection here, which could disconnect one

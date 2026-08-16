@@ -35,6 +35,13 @@ class Config:
     MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').strip().lower() in ('1', 'true', 'yes')
     MAIL_FILE_PATH = os.getenv('MAIL_FILE_PATH', os.path.join(BACKEND_DIR, 'sent_mail.log'))
 
+    # AI: which provider backs generation and scoring. 'local' needs no key.
+    AI_PROVIDER = os.getenv('AI_PROVIDER', 'local')
+
+    # Autonomous agents (requirement 2.d)
+    AGENTS_ENABLED = os.getenv('AGENTS_ENABLED', 'True').strip().lower() in ('1', 'true', 'yes')
+    AGENT_TICK_SECONDS = int(os.getenv('AGENT_TICK_SECONDS', '45'))
+
     # Uploads
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', os.path.join(BACKEND_DIR, 'uploads'))
     # Rejects an oversized body before it is read into memory. Flask answers
@@ -61,6 +68,9 @@ class TestingConfig(Config):
     """Testing configuration"""
     TESTING = True
     DB_NAME = 'social_app_test'
+    # A background job writing to the database during a test run would make
+    # results depend on timing.
+    AGENTS_ENABLED = False
 
 
 class ProductionConfig(Config):

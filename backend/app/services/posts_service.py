@@ -1,4 +1,6 @@
+from app.services.ai import sentiment
 from app.utils.db import Database
+from app.utils.errors import failure
 
 
 class PostsService:
@@ -63,7 +65,8 @@ class PostsService:
                 post['liked_by_me'] = bool(post.get('liked_by_me'))
             return {'success': True, 'posts': posts}
         except Exception as e:
-            return {'success': False, 'error': str(e)}
+            return failure('posts_service.create_post', e,
+                           'Could not create the post')
 
     @staticmethod
     def create_post(user_id, title, body, image_url=None):
@@ -74,13 +77,19 @@ class PostsService:
                 'error': 'user_id, title, and body are required'
             }
         
+        # Scored on the way in so a moderator sees it in the queue immediately.
+        # Flagging holds content for review; it does not refuse to publish it.
+        analysis = sentiment.analyze(f'{title} {body}')
+
         try:
             post_id = Database.execute_update(
                 """
-                INSERT INTO posts (user_id, title, body, image_url)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO posts (user_id, title, body, image_url,
+                                   sentiment_score, is_flagged)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                (user_id, title, body, image_url or None)
+                (user_id, title, body, image_url or None,
+                 analysis['score'], analysis['is_toxic'])
             )
             
             # Fetch the created post
@@ -112,7 +121,5 @@ class PostsService:
                 'post': new_post
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
+            return failure('posts_service.fetch_posts', e,
+                           'Could not load posts')

@@ -14,9 +14,20 @@ export default defineConfig({
     exclude: ['node_modules/**', 'dist/**', 'cypress/**'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html', 'lcov'],
+      // json-summary is what scripts/test.mjs reads for the combined report.
+      reporter: ['text', 'html', 'lcov', 'json-summary'],
       include: ['src/**/*.{js,jsx}'],
       exclude: ['src/main.jsx', 'src/setupTests.js', 'src/tests/**', 'src/assets/**'],
+      // Course requirement 2.f. Set at the level the suite actually reaches, so
+      // the build fails when coverage drops rather than aspiring to a number
+      // nobody enforces. Raise these as coverage improves; never lower them to
+      // make a red run green.
+      thresholds: {
+        statements: 85,
+        lines: 85,
+        functions: 80,
+        branches: 70,
+      },
     },
   },
 })

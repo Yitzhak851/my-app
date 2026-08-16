@@ -139,6 +139,98 @@ export function deleteComment(commentId) {
   return request(`/comments/${commentId}`, { method: "DELETE" });
 }
 
+// ──────────────────────────────────────────────── moderation & admin ──────
+
+export function reportContent({ postId = null, commentId = null, reason }) {
+  return request("/reports", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ post_id: postId, comment_id: commentId, reason }),
+  });
+}
+
+export function fetchReportReasons() {
+  return request("/reports/reasons");
+}
+
+export function fetchModerationQueue(status = "open") {
+  return request(`/moderation/queue${query({ status })}`);
+}
+
+export function fetchFlaggedContent() {
+  return request("/moderation/flagged");
+}
+
+export function resolveReport(reportId, action) {
+  return request(`/moderation/reports/${reportId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+}
+
+export function moderatorDeletePost(postId) {
+  return request(`/moderation/posts/${postId}`, { method: "DELETE" });
+}
+
+export function moderatorDeleteComment(commentId) {
+  return request(`/moderation/comments/${commentId}`, { method: "DELETE" });
+}
+
+export function clearFlag(kind, itemId) {
+  return request(`/moderation/flags/${kind}/${itemId}`, { method: "DELETE" });
+}
+
+export function fetchModerationUsers(search = "") {
+  return request(`/moderation/users${query({ search })}`);
+}
+
+export function setUserBanned(userId, banned) {
+  return request(`/moderation/users/${userId}/ban`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ banned }),
+  });
+}
+
+export function setUserRole(userId, role) {
+  return request(`/moderation/users/${userId}/role`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role }),
+  });
+}
+
+// ───────────────────────────────────────────────────── AI assistance ──────
+
+export function autocorrectText(text) {
+  return request("/ai/autocorrect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}
+
+export function generatePostDraft(style = null) {
+  return request("/ai/generate-post", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ style }),
+  });
+}
+
+export function fetchCommentSuggestions(postId) {
+  return request(`/ai/suggest-comments/${postId}`);
+}
+
+export function analyzeText(text) {
+  return request("/ai/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}
+
 // ───────────────────────────────────────────────────────────── follows ──────
 
 export function followUser(followingId) {

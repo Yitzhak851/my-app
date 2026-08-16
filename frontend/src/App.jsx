@@ -8,6 +8,7 @@ import Search from "./components/Search";
 import Signup from "./components/Signup";
 import ForgotPassword from "./components/ForgotPassword";
 import ResetPassword from "./components/ResetPassword";
+import AdminDashboard from "./components/AdminDashboard";
 import SinglePost from "./components/SinglePost";
 import ToolbarComponent from "./components/ToolbarComponent";
 import Users from "./components/Users";
@@ -35,6 +36,8 @@ function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/user/:id" element={<UserProfile />} />
         <Route path="/users/:id" element={<UserProfile />} />
+
+        <Route path="/admin" element={<ProtectedRoute> <AdminDashboard /> </ProtectedRoute>} />
 
         <Route path="/about" element={<About />} />
       </Routes>
