@@ -61,6 +61,10 @@ function Login() {
           </Divider>
           {/* =========  Sign Up Button =========  */}
           <Button fullWidth variant="outlined" component={Link} to="/signup" data-cy="signup-btn" > Sign Up </Button>
+          {/* Requirement 2.a.i */}
+          <Button fullWidth component={Link} to="/forgot-password" sx={{ mt: 1 }}>
+            Forgot your password?
+          </Button>
         </CardContent>
       </Card>
     </Box>

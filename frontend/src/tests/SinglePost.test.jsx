@@ -1,8 +1,27 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import SinglePost from '../components/SinglePost';
+import { AuthProvider } from '../auth/AuthContext';
+import * as api from '../api/api';
+
+// SinglePost renders the like/comment bar, which reads the auth context.
+vi.mock('../api/api');
+
+const renderPost = (post) =>
+  render(
+    <AuthProvider>
+      <SinglePost post={post} />
+    </AuthProvider>
+  );
 
 describe('SinglePost Component', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const err = new Error('Authentication required');
+    err.status = 401;
+    api.fetchCurrentUser.mockRejectedValue(err);
+  });
+
   const mockPost = {
     id: 1,
     title: 'Test Post Title',
@@ -14,19 +33,19 @@ describe('SinglePost Component', () => {
   };
 
   it('should render post title', () => {
-    render(<SinglePost post={mockPost} />);
+    renderPost(mockPost);
     const titleElement = screen.getByText('Test Post Title');
     expect(titleElement).toBeTruthy();
   });
 
   it('should render post body content', () => {
-    render(<SinglePost post={mockPost} />);
+    renderPost(mockPost);
     const bodyElement = screen.getByText(/This is a test post body/i);
     expect(bodyElement).toBeTruthy();
   });
 
   it('should render user name', () => {
-    render(<SinglePost post={mockPost} />);
+    renderPost(mockPost);
     const nameElement = screen.getByText(/John Doe/i);
     expect(nameElement).toBeTruthy();
   });
@@ -34,7 +53,7 @@ describe('SinglePost Component', () => {
   it('shows a neutral label when the post has no author name', () => {
     // The feed no longer carries the author's email, so there is nothing
     // private to fall back to.
-    render(<SinglePost post={{ ...mockPost, name: null }} />);
+    renderPost({ ...mockPost, name: null });
     expect(screen.getByText(/unknown user/i)).toBeTruthy();
   });
 });

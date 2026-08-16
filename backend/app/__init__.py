@@ -1,7 +1,8 @@
 from flask import Flask
 from flask_cors import CORS
 from app.config import get_config
-from app.routes import auth_bp, posts_bp, users_bp, follow_bp, upload_bp
+from app.routes import (auth_bp, posts_bp, users_bp, follow_bp, upload_bp,
+                        interactions_bp)
 
 
 def create_app():
@@ -46,6 +47,7 @@ def create_app():
     app.register_blueprint(users_bp)
     app.register_blueprint(follow_bp)
     app.register_blueprint(upload_bp)
+    app.register_blueprint(interactions_bp)
     
     # Health check endpoint
     @app.route('/')

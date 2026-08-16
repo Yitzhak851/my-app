@@ -131,6 +131,10 @@ Existing files are never overwritten.
 | `SECRET_KEY` | **yes** | — | Flask secret. Generate with `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `SESSION_COOKIE_SECURE` | no | `False` | Send the session cookie over HTTPS only. **Must be `True` in production**; automatically on when `FLASK_ENV=production` |
 | `SESSION_COOKIE_SAMESITE` | no | `Lax` | Cross-site cookie policy |
+| `FRONTEND_URL` | no | `http://localhost:5173` | Used to build the link inside the password-reset email |
+| `MAIL_BACKEND` | no | `console` | `console` \| `file` \| `smtp`. The default needs no mail server — reset links are printed to the server log |
+| `MAIL_FROM` | no | `no-reply@ybo-social.local` | Sender address |
+| `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_USE_TLS` | no | — | Only used when `MAIL_BACKEND=smtp` |
 
 ### `frontend/.env`
 
@@ -289,6 +293,17 @@ not on a profile, not with a post. `GET /auth/me` returns your own. The search
 box matches usernames only; matching email as well turned it into an
 address-harvesting tool.
 
+### Password reset
+
+There is no mail server in a course project, so `MAIL_BACKEND=console` prints
+the email — reset link included — straight to the terminal running the backend.
+The flow is otherwise the real one, and switching to `smtp` is a config change.
+
+Only the SHA-256 of a reset token is stored, never the token, so a stolen
+database cannot be used to reset anyone's password. A token expires after 30
+minutes, works once, and completing a reset ends every existing session for
+that account.
+
 ### Uploads
 
 Posts can carry a real uploaded image. Files are validated by their leading
@@ -320,6 +335,8 @@ a new origin, add it to `CORS_ORIGINS`.
 | `POST` | `/auth/signup` | Create an account and start a session |
 | `POST` | `/auth/login` | Sign in — sets the `session_id` cookie |
 | `POST` | `/auth/logout` | End the session server-side and clear the cookie |
+| `POST` | `/auth/forgot-password` | Email a reset link. Always answers 200, whether or not the address exists |
+| `POST` | `/auth/reset-password` | Set a new password using the emailed token |
 | `GET` | `/auth/me` | The signed-in user. `401` when signed out |
 | `GET` | `/posts/` | Feed. `?start&limit&userId&followingOnly` — public |
 | `POST` | `/posts/` | Create a post. **Requires a session**; the author is the signed-in user |
@@ -332,6 +349,11 @@ a new origin, add it to `CORS_ORIGINS`.
 | `GET` | `/follows/check` | Is the signed-in user following `?following_id`. **Requires a session** |
 | `GET` | `/follows/<id>/followers` | Who follows this user |
 | `GET` | `/follows/<id>/following` | Who this user follows |
+| `POST` | `/posts/<id>/like` | Like a post. **Requires a session**. Liking twice is a no-op |
+| `DELETE` | `/posts/<id>/like` | Remove your like. **Requires a session** |
+| `GET` | `/posts/<id>/comments` | Comments on a post — public |
+| `POST` | `/posts/<id>/comments` | Add a comment. **Requires a session** |
+| `DELETE` | `/comments/<id>` | Delete your own comment; moderators may delete any |
 
 ---
 

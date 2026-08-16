@@ -6,6 +6,8 @@ import Login from "./components/Login";
 import NewPost from "./components/NewPost";
 import Search from "./components/Search";
 import Signup from "./components/Signup";
+import ForgotPassword from "./components/ForgotPassword";
+import ResetPassword from "./components/ResetPassword";
 import SinglePost from "./components/SinglePost";
 import ToolbarComponent from "./components/ToolbarComponent";
 import Users from "./components/Users";
@@ -26,6 +28,8 @@ function App() {
         <Route path="/new-post" element={<ProtectedRoute> <NewPost /> </ProtectedRoute>} />
         <Route path="/search" element={<Search />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/post/:postId" element={<SinglePost />} />
 
         <Route path="/users" element={<Users />} />

@@ -52,6 +52,8 @@ services:
       SECRET_KEY: dev-only-not-for-production
       SESSION_COOKIE_SECURE: "False"
       SESSION_COOKIE_SAMESITE: Lax
+      FRONTEND_URL: http://localhost:5173
+      MAIL_BACKEND: console
     ports:
       - "5000:5000"
     volumes:

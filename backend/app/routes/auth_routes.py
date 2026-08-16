@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, make_response, request
 
 from app.services import AuthService
+from app.services.password_reset_service import PasswordResetService
 from app.services.session_service import SessionService
 from app.utils.auth import (
     COOKIE_NAME,
@@ -89,6 +90,41 @@ def logout():
         return clear_session_cookie(response), 200
     except Exception:
         return jsonify({'error': 'Could not log out'}), 500
+
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """
+    Start a password reset.
+
+    Always answers 200 with the same message, whether or not the address has an
+    account. Reporting "no such user" would let anyone use this form to find out
+    who is registered.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        PasswordResetService.request_reset(data.get('email'))
+    except Exception:
+        # Even a failure is not reported back, for the same reason.
+        pass
+
+    return jsonify({
+        'message': 'If that address has an account, a reset link is on its way.'
+    }), 200
+
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """Finish a password reset using the emailed token."""
+    try:
+        data = request.get_json(silent=True) or {}
+        result = PasswordResetService.reset(data.get('token'), data.get('password'))
+
+        if result['success']:
+            return jsonify({'message': 'Your password has been changed. Please sign in.'}), 200
+        return jsonify({'error': result['error']}), result.get('status', 400)
+    except Exception:
+        return jsonify({'error': 'Could not reset the password'}), 500
 
 
 @auth_bp.route('/me', methods=['GET'])

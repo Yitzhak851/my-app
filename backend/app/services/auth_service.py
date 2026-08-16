@@ -7,6 +7,20 @@ class AuthService:
     """Authentication service for user registration and login"""
     
     EMAIL_REGEX = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+
+    # Long enough that bcrypt's cost actually protects the account. Length is
+    # the only rule: composition rules ("must contain a symbol") push people
+    # towards predictable substitutions without adding real entropy.
+    MIN_PASSWORD_LENGTH = 8
+
+    @staticmethod
+    def validate_password(password):
+        """Returns an error message, or None when the password is acceptable."""
+        if not password:
+            return 'A password is required'
+        if len(password) < AuthService.MIN_PASSWORD_LENGTH:
+            return f'Password must be at least {AuthService.MIN_PASSWORD_LENGTH} characters'
+        return None
     
     @staticmethod
     def validate_email(email):
@@ -35,6 +49,10 @@ class AuthService:
                 'success': False,
                 'error': 'Invalid email format'
             }
+
+        password_problem = AuthService.validate_password(password)
+        if password_problem:
+            return {'success': False, 'error': password_problem}
         
         # Check if user already exists
         existing_user = Database.execute_query(

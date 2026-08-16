@@ -34,8 +34,12 @@ class FakeDB:
         self.sessions = {}
         self.posts = {}
         self.follows = set()
+        self.likes = set()          # (user_id, post_id)
+        self.comments = {}
+        self.resets = {}            # token_hash -> row
         self.next_user_id = 1
         self.next_post_id = 1
+        self.next_comment_id = 1
 
     # -- helpers used by the tests -------------------------------------------
     def add_user(self, email='u@example.com', name='User', password_hash='x',
@@ -66,6 +70,15 @@ class FakeDB:
             'image_url': None, 'created_at': datetime(2026, 1, 1),
         }
         return pid
+
+    def add_comment(self, post_id, user_id, body='hi', parent_id=None):
+        cid = self.next_comment_id
+        self.next_comment_id += 1
+        self.comments[cid] = {
+            'id': cid, 'post_id': post_id, 'user_id': user_id,
+            'parent_id': parent_id, 'body': body, 'created_at': datetime(2026, 1, 1),
+        }
+        return cid
 
     # -- the Database interface ----------------------------------------------
     @staticmethod
@@ -113,7 +126,12 @@ class FakeDB:
                     ('id', 'email', 'name', 'bio', 'profile_picture', 'role',
                      'is_agent', 'created_at')}
 
-        # user by email (login / signup duplicate check)
+        # user by email (login, signup duplicate check, password reset)
+        if 'from users where email' in s and 'is_banned' in s:
+            for u in self.users.values():
+                if u['email'] == p[0] and not u['is_banned']:
+                    return self._project(dict(u), columns)
+            return None
         if 'from users where email' in s:
             for u in self.users.values():
                 if u['email'] == p[0]:
@@ -128,6 +146,37 @@ class FakeDB:
         # follow check
         if 'from follows where follower_id' in s:
             return {'follower_id': p[0], 'following_id': p[1]} if (p[0], p[1]) in self.follows else None
+
+        # likes
+        if 'count(*) as count from likes where post_id' in s:
+            return {'count': sum(1 for l in self.likes if l[1] == p[0])}
+
+        # comments on a post
+        if 'from comments join users' in s and 'where comments.post_id' in s:
+            rows = [c for c in self.comments.values() if c['post_id'] == p[0]]
+            rows.sort(key=lambda c: c['id'])
+            return [{**c, 'name': self.users[c['user_id']]['name'],
+                     'profile_picture': self.users[c['user_id']]['profile_picture']}
+                    for c in rows]
+        if 'from comments join users' in s and 'where comments.id' in s:
+            c = self.comments.get(p[0])
+            if not c:
+                return None
+            return {**c, 'name': self.users[c['user_id']]['name'],
+                    'profile_picture': self.users[c['user_id']]['profile_picture']}
+        if 'count(*) as count from comments where post_id' in s:
+            return {'count': sum(1 for c in self.comments.values() if c['post_id'] == p[0])}
+        if 'from comments where id' in s:
+            c = self.comments.get(p[0])
+            return self._project(dict(c), columns) if c else None
+
+        # password reset tokens
+        if 'from password_resets' in s:
+            return self.resets.get(p[0])
+
+        # post existence
+        if 'select id from posts where id' in s:
+            return {'id': p[0]} if p[0] in self.posts else None
 
         # counts used by follow-stats
         if 'count(*) as count from follows where following_id' in s:
@@ -155,10 +204,19 @@ class FakeDB:
             elif 'where posts.user_id' in s:
                 rows = [r for r in rows if r['user_id'] == p[0]]
             rows.sort(key=lambda r: r['id'], reverse=True)
+            viewer = p[0] if 'exists(select 1 from likes' in s else None
             out = []
             for r in rows:
                 a = self.users[r['user_id']]
-                joined = {**r, 'name': a['name'], 'profile_picture': a['profile_picture']}
+                joined = {
+                    **r,
+                    'name': a['name'],
+                    'profile_picture': a['profile_picture'],
+                    'like_count': sum(1 for l in self.likes if l[1] == r['id']),
+                    'comment_count': sum(1 for c in self.comments.values()
+                                         if c['post_id'] == r['id']),
+                    'liked_by_me': 1 if viewer and (viewer, r['id']) in self.likes else 0,
+                }
                 if columns is not None and 'email' in columns:
                     joined['email'] = a['email']
                 out.append(joined)
@@ -204,6 +262,32 @@ class FakeDB:
             return uid
         if s.startswith('insert into posts'):
             return self.add_post(p[0], p[1], p[2])
+        if s.startswith('insert ignore into likes') or s.startswith('insert into likes'):
+            self.likes.add((p[0], p[1]))
+            return True
+        if s.startswith('delete from likes'):
+            self.likes.discard((p[0], p[1]))
+            return True
+        if s.startswith('insert into comments'):
+            return self.add_comment(p[0], p[1], p[3], p[2])
+        if s.startswith('delete from comments'):
+            self.comments.pop(p[0], None)
+            return True
+        if s.startswith('insert into password_resets'):
+            self.resets[p[0]] = {'token_hash': p[0], 'user_id': p[1],
+                                 'expires_at': p[2], 'used_at': None}
+            return True
+        if s.startswith('delete from password_resets'):
+            for k in [k for k, v in self.resets.items() if v['user_id'] == p[0]]:
+                del self.resets[k]
+            return True
+        if s.startswith('update password_resets set used_at'):
+            if p[0] in self.resets:
+                self.resets[p[0]]['used_at'] = datetime.now()
+            return True
+        if s.startswith('update users set password'):
+            self.users[p[1]]['password'] = p[0]
+            return True
         if s.startswith('insert into follows'):
             self.follows.add((p[0], p[1]))
             return True

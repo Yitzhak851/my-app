@@ -112,6 +112,33 @@ export function fetchFollowStats(userId) {
   return request(`/users/${userId}/follow-stats`);
 }
 
+// ───────────────────────────────────────────────── likes and comments ──────
+
+/** Resolves to { liked, count } so the caller can trust the server's total. */
+export function likePost(postId) {
+  return request(`/posts/${postId}/like`, { method: "POST" });
+}
+
+export function unlikePost(postId) {
+  return request(`/posts/${postId}/like`, { method: "DELETE" });
+}
+
+export function fetchComments(postId) {
+  return request(`/posts/${postId}/comments`);
+}
+
+export function createComment(postId, body, parentId = null) {
+  return request(`/posts/${postId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, parent_id: parentId }),
+  });
+}
+
+export function deleteComment(commentId) {
+  return request(`/comments/${commentId}`, { method: "DELETE" });
+}
+
 // ───────────────────────────────────────────────────────────── follows ──────
 
 export function followUser(followingId) {
@@ -168,6 +195,26 @@ export function signup(email, password, name) {
 
 export function logout() {
   return request("/auth/logout", { method: "POST" });
+}
+
+/**
+ * Starts a password reset. Always resolves — the server answers identically
+ * whether or not the address has an account, so the UI must not branch on it.
+ */
+export function requestPasswordReset(email) {
+  return request("/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token, password) {
+  return request("/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
 }
 
 /**

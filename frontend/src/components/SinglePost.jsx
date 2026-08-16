@@ -4,35 +4,13 @@ import { useState } from "react";
 import { Card, CardContent, Typography, Button, Box } from "@mui/material";
 import DOMPurify from "dompurify";
 import "quill/dist/quill.snow.css";
+import PostInteractions from "./PostInteractions";
+import { timeAgo } from "./timeAgo";
 
 function decodeHtml(html) {
   const txt = document.createElement("textarea");
   txt.innerHTML = html;
   return txt.value;
-}
-
-function timeAgo(dateString) {
-  if (!dateString) return "";
-
-  const postDate = new Date(dateString);
-  const now = new Date();
-
-  const diffMs = now - postDate;
-  const diffMinutes = Math.floor(diffMs / 1000 / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMinutes < 1) return "הרגע";
-  if (diffMinutes < 60) return `לפני ${diffMinutes} דקות`;
-
-  if (diffHours < 24) {
-    const minutes = diffMinutes % 60;
-    if (minutes === 0) return `לפני ${diffHours} שעות`;
-    return `לפני ${diffHours} שעות ו-${minutes} דקות`;
-  }
-
-  if (diffDays === 1) return "לפני יום אחד";
-  return `לפני ${diffDays} ימים`;
 }
 
 function SinglePost({ post, viewMode = "list" }) {
@@ -140,6 +118,8 @@ function SinglePost({ post, viewMode = "list" }) {
                 {expanded ? "Show Less" : "Read More"}
               </Button>
             </Box>
+
+            <PostInteractions post={post} />
           </Box>
         </Box>
       </CardContent>

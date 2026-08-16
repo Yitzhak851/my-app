@@ -111,5 +111,11 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+  if (context === null) {
+    // Without this the caller gets "Cannot destructure property 'currentUser'
+    // of null", which says nothing about the actual mistake.
+    throw new Error("useAuth must be used inside <AuthProvider>");
+  }
+  return context;
 }
