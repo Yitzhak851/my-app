@@ -1,0 +1,43 @@
+# The autonomous agents (course requirement 2.d), as one process.
+#
+#   sudo cp deploy/ybo-agents.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ybo-agents
+#   sudo journalctl -u ybo-agents -f      # watch them act
+#
+# Separate from the API on purpose. gunicorn runs several workers; a scheduler
+# started inside the app would run once per worker, so the agents would act
+# three times as fast on a three-worker box and the rate would change silently
+# whenever the worker count did. One service, one scheduler, one rate.
+
+[Unit]
+Description=YBO social network agent simulation
+After=network.target ybo-api.service mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=ybo
+Group=ybo
+WorkingDirectory=/opt/ybo/backend
+EnvironmentFile=/opt/ybo/backend/.env
+
+# Whatever the API's configuration says, this process is the one that runs them.
+Environment=AGENTS_ENABLED=True
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=/opt/ybo/backend/venv/bin/python run_agents.py
+
+Restart=always
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

@@ -190,3 +190,33 @@ def test_the_feed_reports_comment_counts(db, client):
     post = client.get('/api/posts/').json[0]
 
     assert post['comment_count'] == 2
+
+# ─────────────────────────────────────────────────── paging limits ──────────
+
+def test_the_feed_caps_an_enormous_limit(db, client):
+    """
+    `?limit=1000000` used to return every post with its author joined on, in
+    one request. The user directory was capped in Phase 8; the feed was not.
+    """
+    uid = db.add_user()
+    for i in range(120):
+        db.add_post(uid, title=f'Post {i}')
+
+    assert len(client.get('/api/posts/?limit=1000000').json) <= 100
+
+
+def test_a_negative_start_does_not_wrap_around(db, client):
+    uid = db.add_user()
+    db.add_post(uid, title='only post')
+
+    res = client.get('/api/posts/?start=-5&limit=5')
+
+    assert res.status_code == 200
+    assert [p['title'] for p in res.json] == ['only post']
+
+
+def test_a_non_numeric_limit_falls_back_to_the_default(db, client):
+    uid = db.add_user()
+    db.add_post(uid)
+
+    assert client.get('/api/posts/?limit=abc').status_code == 200

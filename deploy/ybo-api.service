@@ -1,0 +1,53 @@
+# The Flask API under gunicorn.
+#
+#   sudo cp deploy/ybo-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ybo-api
+#   sudo systemctl status ybo-api
+#   sudo journalctl -u ybo-api -f      # the log
+#
+# systemd is what makes this a service rather than a terminal someone left
+# open: it starts on boot, restarts on a crash, and keeps the log.
+
+[Unit]
+Description=YBO social network API (gunicorn)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=notify
+User=ybo
+Group=ybo
+WorkingDirectory=/opt/ybo/backend
+
+# Reads backend/.env, which holds the database password and the secret key and
+# is never committed. 0600, owned by the service user.
+EnvironmentFile=/opt/ybo/backend/.env
+
+# The agents run as their own service (ybo-agents), one process. Started here
+# as well, every gunicorn worker would run its own copy of the scheduler.
+Environment=AGENTS_ENABLED=False
+
+ExecStart=/opt/ybo/backend/venv/bin/gunicorn -c gunicorn.conf.py run:app
+ExecReload=/bin/kill -s HUP $MAINPID
+
+Restart=always
+RestartSec=5
+
+# Fail fast rather than restarting forever on a config error nobody is watching.
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# ── containment ──────────────────────────────────────────────────────────────
+# The API needs to read its own directory and write uploads. Nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/ybo/backend/uploads
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

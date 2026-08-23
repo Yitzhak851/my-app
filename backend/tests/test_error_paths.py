@@ -121,3 +121,33 @@ def test_no_endpoint_raises_or_claims_success_when_the_database_fails(
 def test_the_health_check_still_answers_during_an_outage(outage, client):
     """A liveness probe that needs the database cannot distinguish the two."""
     assert client.get('/api/health').status_code == 200
+
+
+def test_every_failure_label_names_the_function_it_is_in():
+    """
+    `failure()` writes its first argument to the log; it is the only thing that
+    says where the exception came from. Two of these ended up swapped, so a
+    failure in fetch_posts logged as create_post — which sends whoever is
+    debugging to the wrong function while the real one looks innocent.
+
+    Checked by reading the source rather than by keeping a list, so a service
+    added later is covered without anyone remembering to come back here.
+    """
+    import ast
+    import pathlib
+
+    services = pathlib.Path(__file__).resolve().parents[1] / 'app' / 'services'
+    wrong = []
+
+    for path in sorted(services.glob('*.py')):
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        for cls in (n for n in tree.body if isinstance(n, ast.ClassDef)):
+            for func in (n for n in cls.body if isinstance(n, ast.FunctionDef)):
+                for node in ast.walk(func):
+                    if isinstance(node, ast.Call) and getattr(node.func, 'id', '') == 'failure':
+                        label = node.args[0].value
+                        expected = f'{path.stem}.{func.name}'
+                        if label != expected:
+                            wrong.append(f'{label!r} is inside {expected}')
+
+    assert not wrong, 'mislabelled failure() calls: ' + '; '.join(wrong)

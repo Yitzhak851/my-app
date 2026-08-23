@@ -51,6 +51,10 @@ class Config:
     # CORS
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
 
+    # Set to True only when the app really is behind a reverse proxy that sets
+    # X-Forwarded-*. See the ProxyFix note in app/__init__.py.
+    TRUST_PROXY_HEADERS = os.getenv('TRUST_PROXY_HEADERS', 'False').strip().lower() in ('1', 'true', 'yes')
+
     # Session cookie
     # Secure=True requires HTTPS, which localhost does not have, so it is off by
     # default and switched on for production below.
@@ -77,8 +81,17 @@ class ProductionConfig(Config):
     """Production configuration"""
     DEBUG = False
     TESTING = False
-    # Served over HTTPS, so the session cookie must never travel in the clear.
-    SESSION_COOKIE_SECURE = True
+
+    # Served over HTTPS behind nginx, so the session cookie must never travel in
+    # the clear. This is also the single most confusing way to break a first
+    # deployment: on a plain-HTTP server the browser accepts the login response
+    # and then silently discards the cookie, so every page says "signed out"
+    # with a 200 in the log and no error anywhere. run.py refuses to start in
+    # that combination rather than let it happen.
+    SESSION_COOKIE_SECURE = os.getenv('SESSION_COOKIE_SECURE', 'True').strip().lower() in ('1', 'true', 'yes')
+
+    # There is always a proxy in production — that is what serves the frontend.
+    TRUST_PROXY_HEADERS = os.getenv('TRUST_PROXY_HEADERS', 'True').strip().lower() in ('1', 'true', 'yes')
 
 
 def get_config():

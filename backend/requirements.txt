@@ -7,3 +7,5 @@ Werkzeug==3.0.1
 pytest==8.3.4
 pytest-cov==6.0.0
 APScheduler==3.10.4
+# Production WSGI server. The Flask dev server is not one.
+gunicorn==23.0.0

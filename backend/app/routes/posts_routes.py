@@ -5,6 +5,11 @@ from app.utils.auth import current_user, login_required
 
 posts_bp = Blueprint('posts', __name__, url_prefix='/api/posts')
 
+# The same cap the user directory has. Without it `?limit=1000000` pulls every
+# post, with every author joined on, in a single request — the cheapest way
+# there is to make the server do a lot of work for one client.
+MAX_LIMIT = 100
+
 
 @posts_bp.route('/', methods=['GET'])
 def fetch_posts():
@@ -17,8 +22,9 @@ def fetch_posts():
     else's personalised feed.
     """
     try:
-        start = request.args.get('start', 0, type=int)
-        limit = request.args.get('limit', 10, type=int)
+        start = max(request.args.get('start', 0, type=int) or 0, 0)
+        limit = request.args.get('limit', 10, type=int) or 10
+        limit = min(max(limit, 1), MAX_LIMIT)
         user_id = request.args.get('userId', None, type=int)
         following_only = request.args.get('followingOnly', 'false').lower() == 'true'
 

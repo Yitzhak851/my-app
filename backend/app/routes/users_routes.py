@@ -8,7 +8,8 @@ driver messages quote the SQL, and the SQL names the columns.
 """
 from flask import Blueprint, request, jsonify
 
-from app.services import UsersService
+from app.services import SuggestionsService, UsersService
+from app.utils.auth import current_user, login_required
 
 users_bp = Blueprint('users', __name__, url_prefix='/api/users')
 
@@ -35,6 +36,32 @@ def fetch_users():
 
     except Exception:
         return jsonify({'error': 'Could not load users'}), 500
+
+
+@users_bp.route('/suggestions', methods=['GET'])
+@login_required
+def suggested_users():
+    """
+    Who this user might want to follow (optional requirement 3.e.i).
+
+    Signed-in only, and always for the session's user: suggestions are built
+    from who you follow, so accepting a user id here would let anyone read the
+    shape of somebody else's social graph.
+
+    Declared before /<int:user_id> for readability only — the converter means
+    "suggestions" could never match that rule anyway.
+    """
+    try:
+        result = SuggestionsService.for_user(
+            current_user()['id'], request.args.get('limit', type=int))
+
+        if result['success']:
+            return jsonify(result['suggestions']), 200
+        print(f"users: suggestions failed: {result['error']}", flush=True)
+        return jsonify({'error': 'Could not load suggestions'}), 500
+
+    except Exception:
+        return jsonify({'error': 'Could not load suggestions'}), 500
 
 
 @users_bp.route('/<int:user_id>', methods=['GET'])

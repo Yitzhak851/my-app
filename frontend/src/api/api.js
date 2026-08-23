@@ -108,6 +108,15 @@ export function fetchUser(userId) {
   return request(`/users/${userId}`);
 }
 
+/**
+ * Who to follow next (optional requirement 3.e.i). Always about the signed-in
+ * user — the server reads the viewer from the session, because these are built
+ * from who you follow and that is not public.
+ */
+export function fetchSuggestedUsers(limit = 5) {
+  return request(`/users/suggestions${query({ limit })}`);
+}
+
 export function fetchFollowStats(userId) {
   return request(`/users/${userId}/follow-stats`);
 }

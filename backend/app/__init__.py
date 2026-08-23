@@ -1,5 +1,6 @@
 from flask import Flask
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from app.config import get_config
 from app.routes import (auth_bp, posts_bp, users_bp, follow_bp, upload_bp,
                         interactions_bp, moderation_bp, ai_bp)
@@ -26,6 +27,18 @@ def create_app():
     # Load configuration
     config = get_config()
     app.config.from_object(config)
+
+    # Behind nginx the app sees every request as coming from 127.0.0.1 over
+    # plain HTTP, because that is what the proxy speaks to it. ProxyFix reads
+    # the X-Forwarded-* headers nginx sets so the real client address and the
+    # real scheme are used instead — which is what makes url_for(_external=True)
+    # produce https:// links, and what stops every log line saying 127.0.0.1.
+    #
+    # Only ever trust these headers when there really is a proxy in front:
+    # a client can send them itself, and trusting them without one lets anyone
+    # claim any IP address.
+    if config.TRUST_PROXY_HEADERS:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     
     # Setup CORS
     # supports_credentials is what allows the browser to send the session

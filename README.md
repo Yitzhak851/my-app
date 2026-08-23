@@ -86,7 +86,22 @@ never touch the request object, which keeps each layer testable on its own.
 
 ---
 
-## Requirements
+## Course requirements
+
+Every requirement from the brief, what satisfies it and where to look, is in
+**[FINAL_AUDIT.md](FINAL_AUDIT.md)** — including an honest note on what is
+weaker and what was deliberately left out.
+
+| | |
+|---|---|
+| Basic (1.a – 1.f) | all met |
+| Core (2.a – 2.f) | all met |
+| Optional | 3 of 6: responsive design (3.b), suggested users (3.e.i), containerization (3.f) |
+| Coverage (2.f) | 93.8% backend, 93.7% frontend — the target is 85% |
+
+---
+
+## Prerequisites
 
 Install these yourself — the setup script checks for them but will not install
 system software on your behalf.
@@ -217,7 +232,7 @@ Run from the project root.
 | `npm run db:diagram` | Re-render `db/erd.svg` from `db/erd.mmd` |
 | `npm run db:probe` | Test the database connection through the Flask app's own client |
 | `npm run agents:seed` | Create the ten agent accounts. Run automatically by setup |
-| `npm run verify` | Walk the running app in a real browser, 33 checks. Needs the servers up and `npm i -D playwright` |
+| `npm run verify` | Walk the running app in a real browser, 35 checks. Needs the servers up and `npm i -D playwright` |
 
 Frontend-only (run inside `frontend/`):
 
@@ -241,9 +256,9 @@ npm test          # both suites, with coverage, from the project root
 
 | Suite | Tests | Statement coverage |
 |---|---|---|
-| Backend (pytest) | 302 | 94% |
-| Frontend (Vitest + React Testing Library) | 208 | 90% |
-| **Total** | **510** | — |
+| Backend (pytest) | 337 | 93.8% |
+| Frontend (Vitest + React Testing Library) | 231 | 93.6% |
+| **Total** | **568** | — |
 
 Course requirement 2.f asks for 85%. The threshold is enforced rather than
 reported: `backend/pytest.ini` sets `--cov-fail-under=85` and
@@ -268,6 +283,11 @@ broke. A few examples:
 - `frontend/src/tests/apiClient.test.js` — one row per exported call, checking
   the verb, the URL and that `credentials: "include"` is set. A dropped
   credentials flag is invisible until something needs authentication.
+- `backend/tests/test_production_guards.py` — the checks that refuse to start a
+  production process with a placeholder `SECRET_KEY`, an empty `DB_PASSWORD` or
+  `FLASK_DEBUG` on. The debug check reads the environment rather than
+  `app.config`, because `ProductionConfig` hardcodes `DEBUG = False` and would
+  have made the guard agree that everything was fine.
 
 **Database in the backend suite.** `backend/tests/conftest.py` swaps the
 `Database.execute_*` entry points for an in-memory fake, so routes, services and
@@ -286,9 +306,53 @@ npm start                                                # in one terminal
 npm run verify                                           # in another
 ```
 
-33 checks: sign up, publish, like, comment, follow, report, moderate, ban,
-the agents, grid layout, phone width, and sign-out. Each prints PASS or FAIL and
+35 checks: sign up, publish, upload an image, like, comment, follow, suggested
+users, report, moderate, ban, the agents, grid layout, phone width, and sign-out. Each prints PASS or FAIL and
 the script exits non-zero if any fail.
+
+---
+
+## Deployment
+
+The app is deployed as one origin behind nginx: the built React app at `/`, the
+Flask API at `/api`, uploaded images served from disk. There is no separate API
+host, so there is no CORS in production and the session cookie is first-party.
+
+```bash
+# on the server
+git clone https://github.com/Yitzhak851/my-app.git
+cd my-app
+sudo bash deploy/deploy.sh
+```
+
+`deploy/deploy.sh` is idempotent and is the update path as well as the install
+path. It never drops the database and never overwrites the server's `.env`.
+
+**[deploy/README.md](deploy/README.md) is the full walkthrough** — the EC2
+instance, the security group, MySQL, HTTPS with certbot, what to watch, and a
+table of the failures that actually happen with the cause of each.
+
+| File | What it is |
+|---|---|
+| `deploy/deploy.sh` | install and update, with checks at the end |
+| `deploy/nginx.conf` | the one-origin site: `/`, `/api/`, `/static/uploads/` |
+| `deploy/ybo-api.service` | gunicorn under systemd |
+| `deploy/ybo-agents.service` | the agent simulation, as exactly one process |
+| `deploy/env.production.example` | the production environment template |
+| `backend/gunicorn.conf.py` | workers, threads and timeouts, with the reasoning |
+
+Two things about this setup are worth knowing before you deploy:
+
+- **HTTPS is required, not recommended.** `SESSION_COOKIE_SECURE=True` means the
+  browser will silently discard the session cookie over plain HTTP. The API log
+  shows nothing but `200`s and every page says you are signed out. Run certbot.
+- **The agents are their own service.** gunicorn runs several workers; a
+  scheduler inside the app would run once per worker and the simulation would
+  move at the worker count times its configured rate.
+
+`run.py` refuses to start in production while `SECRET_KEY` is a placeholder,
+`DB_PASSWORD` is empty, or `FLASK_DEBUG` is on — all three are silent failures
+otherwise.
 
 ---
 
@@ -297,6 +361,7 @@ the script exits non-zero if any fail.
 ```text
 my-app/
 ├── package.json            root scripts — the entry point
+├── FINAL_AUDIT.md          requirement-by-requirement, with evidence
 ├── docker-compose.yml      full environment in containers
 │
 ├── db/
@@ -305,6 +370,8 @@ my-app/
 │   ├── erd.mmd             diagram source
 │   ├── erd.svg             rendered diagram (requirement 1.f)
 │   └── erd.html            diagram as a standalone page
+│
+├── deploy/                 production: nginx, systemd, deploy.sh, the AWS guide
 │
 ├── scripts/
 │   ├── setup.mjs           prerequisites, install, configure, database

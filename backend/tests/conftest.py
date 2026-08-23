@@ -320,7 +320,42 @@ class FakeDB:
                 if columns is not None and 'email' in columns:
                     joined['email'] = a['email']
                 out.append(joined)
+            # Honour LIMIT/OFFSET — they are the last two parameters. The fake
+            # used to return a hardcoded 20, which made any test about paging
+            # or about the limit cap pass without proving anything.
+            if 'limit %s offset %s' in s and len(p) >= 2:
+                limit, offset = p[-2], p[-1]
+                return out[offset:offset + limit]
             return out[:20]
+
+        # suggested users, by mutual follows (3.e.i)
+        if 'from follows as mine' in s:
+            viewer, limit = p[0], p[-1]
+            following = {f[1] for f in self.follows if f[0] == viewer}
+            counts = {}
+            for followee in following:
+                for candidate in (f[1] for f in self.follows if f[0] == followee):
+                    if candidate == viewer or candidate in following:
+                        continue
+                    user = self.users.get(candidate)
+                    if not user or user['is_banned']:
+                        continue
+                    counts[candidate] = counts.get(candidate, 0) + 1
+            ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+            return [{**self.users[uid], 'mutual_count': n} for uid, n in ranked[:limit]]
+
+        # suggested users, the popularity fallback
+        if 'from users as u left join follows as f' in s:
+            viewer, limit = p[0], p[-1]
+            following = {f[1] for f in self.follows if f[0] == viewer}
+            rows = []
+            for user in self.users.values():
+                if user['id'] == viewer or user['id'] in following or user['is_banned']:
+                    continue
+                rows.append({**user, 'follower_count':
+                             sum(1 for f in self.follows if f[1] == user['id'])})
+            rows.sort(key=lambda r: (-r['follower_count'], r['id']))
+            return rows[:limit]
 
         # follower / following lists (users joined through the follows table)
         if 'from users join follows' in s:

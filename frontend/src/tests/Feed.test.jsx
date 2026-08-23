@@ -131,4 +131,88 @@ describe("Feed", () => {
     expect(grid).toBeTruthy();
     expect(screen.getAllByText(/^Post \d$/).length).toBe(4);
   });
+
+  // ── the personal feed ────────────────────────────────────────────────────
+
+  describe("the following filter", () => {
+    beforeEach(() => signedInAs({ id: 7, name: "Dana", role: "user" }));
+
+    it("explains an empty personal feed instead of looking broken", async () => {
+      // One click after seeing ten posts, "אין עדיין פוסטים להצגה" reads as a
+      // failure. The real reason is that this person follows nobody, and the
+      // screen has to say so and offer a way out.
+      api.fetchPosts.mockResolvedValueOnce(page(1, 10)).mockResolvedValueOnce([]);
+      show();
+      await screen.findByText("Post 1");
+
+      await userEvent.setup().click(screen.getByRole("button", { name: /רק מי שאני עוקב/ }));
+
+      const empty = await screen.findByTestId("empty-following");
+      expect(empty).toHaveTextContent(/מהאנשים שאתה עוקב אחריהם/);
+      expect(screen.getByRole("link", { name: /למצוא אנשים/ })).toHaveAttribute("href", "/users");
+    });
+
+    it("offers a way back to the global feed", async () => {
+      api.fetchPosts.mockResolvedValueOnce(page(1, 10)).mockResolvedValueOnce([]);
+      show();
+      await screen.findByText("Post 1");
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /רק מי שאני עוקב/ }));
+      await screen.findByTestId("empty-following");
+
+      api.fetchPosts.mockResolvedValue(page(1, 10));
+      await user.click(screen.getByRole("button", { name: /חזרה לכל הפוסטים/ }));
+
+      expect(await screen.findByText("Post 1")).toBeInTheDocument();
+      expect(screen.queryByTestId("empty-following")).not.toBeInTheDocument();
+    });
+
+    it("keeps the generic wording on the global feed", async () => {
+      api.fetchPosts.mockResolvedValue([]);
+      show();
+
+      expect(await screen.findByText(/אין עדיין פוסטים/)).toBeInTheDocument();
+      expect(screen.queryByTestId("empty-following")).not.toBeInTheDocument();
+    });
+
+    it("switching filter while the first page is still loading is not dropped", async () => {
+      // The bug: `if (loading) return` guarded the filter change too. Clicking
+      // during the first load cleared the posts, hit the guard and fetched
+      // nothing, and the earlier request's `finally` then hid the spinner —
+      // a blank feed with no posts, no spinner and no error.
+      let finishTheFirstLoad;
+      api.fetchPosts.mockReturnValueOnce(new Promise((r) => { finishTheFirstLoad = r; }));
+      show();
+      await waitFor(() => expect(api.fetchPosts).toHaveBeenCalledTimes(1));
+
+      api.fetchPosts.mockResolvedValue(page(50, 2));
+      await userEvent.setup().click(screen.getByRole("button", { name: /רק מי שאני עוקב/ }));
+
+      await waitFor(() => expect(api.fetchPosts).toHaveBeenCalledTimes(2));
+      expect(api.fetchPosts).toHaveBeenLastCalledWith(0, 10, undefined, true);
+
+      finishTheFirstLoad(page(1, 10));
+
+      // The personal feed wins: it was asked for last.
+      expect(await screen.findByText("Post 50")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText("Post 1")).not.toBeInTheDocument());
+    });
+
+    it("a superseded reply never lands on top of the newer feed", async () => {
+      let finishTheGlobalLoad;
+      api.fetchPosts.mockReturnValueOnce(new Promise((r) => { finishTheGlobalLoad = r; }));
+      show();
+      await waitFor(() => expect(api.fetchPosts).toHaveBeenCalledTimes(1));
+
+      api.fetchPosts.mockResolvedValue(page(50, 2));
+      await userEvent.setup().click(screen.getByRole("button", { name: /רק מי שאני עוקב/ }));
+      await screen.findByText("Post 50");
+
+      finishTheGlobalLoad(page(1, 10));   // the stale reply arrives now
+
+      await new Promise((r) => setTimeout(r, 60));
+      expect(screen.queryByText("Post 1")).not.toBeInTheDocument();
+      expect(screen.getByText("Post 50")).toBeInTheDocument();
+    });
+  });
 });

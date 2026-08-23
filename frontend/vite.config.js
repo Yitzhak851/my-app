@@ -13,5 +13,15 @@ export default defineConfig({
     // allows 5173, so every API call fails with a CORS error that looks like a
     // backend bug. Failing loudly on a busy port is far easier to diagnose.
     strictPort: true,
+    // Uploaded images are stored with a root-relative path, so the same value
+    // works in development and in production. In development that path would
+    // otherwise resolve to the Vite server, which knows nothing about it — so
+    // it is forwarded to the API, exactly as nginx does on the server.
+    proxy: {
+      '/static/uploads': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: false,
+      },
+    },
   },
 })

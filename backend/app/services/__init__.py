@@ -10,7 +10,8 @@ from .mail_service import MailService
 from .password_reset_service import PasswordResetService
 from .moderation_service import ModerationService
 from .agent_service import AgentService
+from .suggestions_service import SuggestionsService
 
 __all__ = ['AuthService', 'PostsService', 'UsersService', 'FollowService', 'SessionService', 'UploadService',
            'LikesService', 'CommentsService', 'MailService', 'PasswordResetService',
-           'ModerationService', 'AgentService']
+           'ModerationService', 'AgentService', 'SuggestionsService']

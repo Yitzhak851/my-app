@@ -154,3 +154,45 @@ def test_a_tick_that_did_nothing_prints_nothing(runner, db, capsys, monkeypatch)
     scheduler.run_all()
 
     assert capsys.readouterr().out == ''
+
+
+# ─────────────────────────────────────────────── surviving a long sleep ──────
+
+def test_a_missed_tick_is_not_dropped_after_the_machine_sleeps(runner):
+    """
+    APScheduler drops a run whose scheduled time has passed by more than the
+    grace period, and the default grace is one second. Suspend the machine — or
+    stop and start the instance — and every pending run is "missed", so the
+    simulation can simply never resume. Nothing crashes and nothing is logged.
+    """
+    runner.config['AGENT_TICK_SECONDS'] = 30
+
+    job = agents_runner.start(runner).jobs[0]
+
+    assert job['misfire_grace_time'] >= 30 * 5
+
+
+def test_the_time_since_the_last_tick_is_observable(runner, db, monkeypatch):
+    """Something has to be able to tell "still running" from "stopped"."""
+    from app.services.agent_service import AgentService
+
+    assert agents_runner.seconds_since_last_tick() is None, 'nothing has run yet'
+
+    monkeypatch.setattr(AgentService, 'tick', staticmethod(lambda rng=None: None))
+    agents_runner.start(runner).run_all()
+
+    idle = agents_runner.seconds_since_last_tick()
+    assert idle is not None and idle < 5
+
+
+def test_a_tick_that_raises_still_counts_as_the_scheduler_being_alive(runner, db, monkeypatch):
+    """
+    The watchdog asks "is the scheduler firing?", not "is every tick happy".
+    Restarting the process over one bad tick would help nobody.
+    """
+    from app.services.agent_service import AgentService
+
+    monkeypatch.setattr(AgentService, 'tick', staticmethod(lambda rng=None: 'Gil liked a post'))
+    agents_runner.start(runner).run_all()
+
+    assert agents_runner.seconds_since_last_tick() is not None

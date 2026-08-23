@@ -29,10 +29,18 @@ def upload_image():
     except Exception:
         return jsonify({'error': 'Could not save the image'}), 500
 
-    # An absolute URL, because in development the frontend is served from a
-    # different origin than the API and a bare path would resolve to :5173.
+    # A root-relative path, NOT an absolute URL.
+    #
+    # This value is stored in the database with the post, so an absolute URL
+    # bakes the hostname in permanently: every image uploaded while developing
+    # is saved as http://localhost:5000/... and is broken the moment the app is
+    # deployed anywhere else. A relative path follows the app to any domain.
+    #
+    # It resolves in development too: the Vite dev server proxies
+    # /static/uploads to the API (see frontend/vite.config.js), and in
+    # production nginx serves the same path from disk.
     return jsonify({
-        'url': url_for('uploads.serve_upload', filename=stored_name, _external=True),
+        'url': url_for('uploads.serve_upload', filename=stored_name),
         'filename': stored_name,
     }), 201
 

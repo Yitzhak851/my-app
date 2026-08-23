@@ -80,7 +80,12 @@ const run = async () => {
     ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM }
     : {}
   const browser = await chromium.launch(launch)
-  const context = await browser.newContext({ viewport: { width: 1400, height: 1000 } })
+  const context = await browser.newContext({
+    viewport: { width: 1400, height: 1000 },
+    // For running against a local production trial with a self-signed
+    // certificate. Never needed against a real deployment.
+    ignoreHTTPSErrors: process.env.IGNORE_HTTPS_ERRORS === 'true',
+  })
   const page = await context.newPage()
 
   const consoleErrors = []
@@ -94,8 +99,8 @@ const run = async () => {
 
   await check('the feed loads for a visitor who is not signed in', async () => {
     await page.goto(APP)
-    await page.waitForSelector('article, .MuiCard-root', { timeout: 10000 })
-    const posts = await page.locator('.MuiCard-root').count()
+    await page.waitForSelector('[data-testid="post-card"]', { timeout: 15000 })
+    const posts = await page.locator('[data-testid="post-card"]').count()
     assert(posts > 0, 'no posts rendered')
     return `${posts} cards`
   })
@@ -193,11 +198,47 @@ const run = async () => {
     return `author id ${mine.user_id}`
   })
 
+  await check('an image can be uploaded and is served back', async () => {
+    // The upload path is stored in the database with the post. It has to be
+    // root-relative: an absolute URL bakes in whatever host uploaded it, so
+    // every image uploaded during development is broken once the app moves to
+    // a server.
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64'
+    )
+
+    await page.goto(`${APP}/new-post`)
+    await page.waitForSelector('.ql-editor', { timeout: 10000 })
+    await page.setInputFiles('[data-testid="image-input"]',
+      { name: 'regression.png', mimeType: 'image/png', buffer: png })
+    await page.waitForSelector('img[alt*="Preview"]', { timeout: 10000 })
+
+    const withImage = `${title} with an image`
+    await page.locator('input[placeholder="Enter post title..."]').fill(withImage)
+    await page.locator('.ql-editor').click()
+    await page.keyboard.type('This one carries an uploaded image.')
+    await page.getByRole('button', { name: 'PUBLISH' }).click()
+    await page.waitForSelector(`text=${withImage}`, { timeout: 15000 })
+
+    const posts = await (await page.request.get(`${API}/posts/?limit=5`)).json()
+    const created = posts.find((p) => p.title === withImage)
+    assert(created?.image_url, 'the post was saved without an image')
+    assert(created.image_url.startsWith('/'),
+      `the stored URL is absolute: ${created.image_url}`)
+
+    const fetched = await page.request.get(`${APP}${created.image_url}`)
+    assert(fetched.ok(), `the image answered ${fetched.status()}`)
+    assert((fetched.headers()['content-type'] || '').includes('image'),
+      `served as ${fetched.headers()['content-type']}`)
+    return created.image_url
+  })
+
   // ── likes, comments, follows ──────────────────────────────────────────────
 
   await check('a post can be liked and the count goes up', async () => {
     await page.goto(APP)
-    const card = page.locator('.MuiCard-root').filter({ hasText: title }).first()
+    const card = page.locator('[data-testid="post-card"]').filter({ hasText: title }).first()
     await card.waitFor({ timeout: 10000 })
     const count = card.locator('[data-testid="like-count"]').first()
     const before = (await count.innerText()).trim()
@@ -210,7 +251,7 @@ const run = async () => {
 
   await check('the like survives a reload, so it was stored server-side', async () => {
     await page.reload()
-    const card = page.locator('.MuiCard-root').filter({ hasText: title }).first()
+    const card = page.locator('[data-testid="post-card"]').filter({ hasText: title }).first()
     await card.waitFor({ timeout: 10000 })
     const label = (await card.locator('[data-testid="like-count"]').first().innerText()).trim()
     assert(Number(label) >= 1, `the count reads "${label}" after reload`)
@@ -220,7 +261,7 @@ const run = async () => {
   })
 
   await check('a comment can be written and is shown', async () => {
-    const card = page.locator('.MuiCard-root').filter({ hasText: title }).first()
+    const card = page.locator('[data-testid="post-card"]').filter({ hasText: title }).first()
     await card.locator('button[aria-expanded]').first().click()
     const box = card.getByLabel('Write a comment').first()
     await box.waitFor({ timeout: 10000 })
@@ -251,11 +292,43 @@ const run = async () => {
     return 'restored'
   })
 
+  await check('the suggested-users panel recommends people and can follow them', async () => {
+    // Optional requirement 3.e.i. The account created by this walkthrough now
+    // follows user 1, so its circle has something to suggest from.
+    await page.goto(APP)
+    // Two copies are rendered — a sidebar for wide screens and a stacked one
+    // for narrow. Only one is visible at any width; pick that one.
+    const panel = page.locator('[data-testid="suggested-users"]:visible').first()
+    await panel.waitFor({ timeout: 10000 })
+    // The panel appears with a spinner before the suggestions arrive, so wait
+    // for a row rather than for the box.
+    await panel.locator('a[href^="/users/"]').first().waitFor({ timeout: 10000 })
+
+    const rows = await panel.locator('a[href^="/users/"]').allInnerTexts()
+    assert(rows.length > 0, 'the panel is empty')
+
+    const reasons = await panel.locator('span').allInnerTexts()
+    assert(reasons.some((r) => /followed by|popular/i.test(r)),
+      'no suggestion says why it is being suggested')
+
+    const first = rows[0]
+    const firstRow = panel.getByRole('link', { name: first })
+    await panel.getByRole('button', { name: 'Follow' }).first().click()
+
+    // Waiting on the locator, not on document.innerText: two copies of the
+    // panel are rendered (one for wide screens, one for narrow) and only one is
+    // visible. `innerText` on the hidden one falls back to textContent, so a
+    // document-wide text check never stops seeing the name.
+    await firstRow.waitFor({ state: 'detached', timeout: 10000 })
+
+    return `${rows.length} suggestions; followed "${first}" and it left the list`
+  })
+
   // ── reporting ─────────────────────────────────────────────────────────────
 
   await check('a post can be reported', async () => {
     await page.goto(APP)
-    const card = page.locator('.MuiCard-root').filter({ hasText: title }).first()
+    const card = page.locator('[data-testid="post-card"]').filter({ hasText: title }).first()
     await card.waitFor({ timeout: 10000 })
     await card.getByRole('button', { name: 'Report' }).first().click()
     await page.waitForSelector('text=Report this post', { timeout: 10000 })
@@ -351,7 +424,9 @@ const run = async () => {
     const banned = uniqueEmail(`ban${stamp}`)
     // A separate browser context, so signing the victim up does not replace
     // the admin's session cookie in the context this walkthrough is using.
-    const victim = await browser.newContext()
+    const victim = await browser.newContext({
+      ignoreHTTPSErrors: process.env.IGNORE_HTTPS_ERRORS === 'true',
+    })
     const victimPage = await victim.newPage()
 
     await victimPage.goto(`${APP}/signup`)
@@ -388,27 +463,40 @@ const run = async () => {
   })
 
   await check('the agents are still acting on their own', async () => {
-    const before = await page.request.get(`${API}/posts/?limit=50`)
-    const countBefore = (await before.json()).reduce((n, p) => n + (p.comment_count || 0), 0)
-    // The tick interval is 45s by default; wait a little over one.
-    await page.waitForTimeout(50_000)
-    const after = await page.request.get(`${API}/posts/?limit=50`)
-    const countAfter = (await after.json()).reduce((n, p) => n + (p.comment_count || 0), 0)
-    assert(countAfter >= countBefore, 'comment count went backwards')
-    return countAfter > countBefore
-      ? `comments ${countBefore} → ${countAfter}`
-      : `no new comment this tick (the agent may have posted or liked instead)`
+    // Any agent action — a post, a like, a comment — changes this payload.
+    // Counting comments alone was unreliable: a new agent post pushes an older
+    // one out of the page, so the total could legitimately go down.
+    const snapshot = async () => {
+      const res = await page.request.get(`${API}/posts/?limit=100`)
+      const posts = await res.json()
+      return JSON.stringify(posts.map((p) =>
+        [p.id, p.like_count, p.comment_count]))
+    }
+
+    // Sampled more than once: a single window can legitimately catch a tick
+    // that liked something already liked, and failing on that would make this
+    // check flaky rather than informative.
+    const before = await snapshot()
+    let after = before
+    for (let attempt = 0; attempt < 3 && after === before; attempt += 1) {
+      await page.waitForTimeout(25_000)
+      after = await snapshot()
+    }
+
+    assert(before !== after,
+      'nothing changed in three ticks — the simulation is not running')
+    return 'the feed changed on its own'
   })
 
   // ── layout ────────────────────────────────────────────────────────────────
 
   await check('grid view puts more than one post on a row', async () => {
     await page.goto(APP)
-    await page.waitForSelector('.MuiCard-root', { timeout: 10000 })
+    await page.waitForSelector('[data-testid="post-card"]', { timeout: 15000 })
     const grid = page.getByRole('button', { name: /grid/i }).first()
     if (await grid.count()) await grid.click()
     await page.waitForTimeout(600)
-    const tops = await page.locator('.MuiCard-root').evaluateAll(
+    const tops = await page.locator('[data-testid="post-card"]').evaluateAll(
       (nodes) => nodes.slice(0, 6).map((n) => Math.round(n.getBoundingClientRect().top))
     )
     const onFirstRow = tops.filter((t) => t === tops[0]).length

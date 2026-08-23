@@ -65,8 +65,8 @@ class PostsService:
                 post['liked_by_me'] = bool(post.get('liked_by_me'))
             return {'success': True, 'posts': posts}
         except Exception as e:
-            return failure('posts_service.create_post', e,
-                           'Could not create the post')
+            return failure('posts_service.fetch_posts', e,
+                           'Could not load posts')
 
     @staticmethod
     def create_post(user_id, title, body, image_url=None):
@@ -121,5 +121,5 @@ class PostsService:
                 'post': new_post
             }
         except Exception as e:
-            return failure('posts_service.fetch_posts', e,
-                           'Could not load posts')
+            return failure('posts_service.create_post', e,
+                           'Could not create the post')

@@ -25,7 +25,7 @@ function SinglePost({ post, viewMode = "list" }) {
   const cleanBody = DOMPurify.sanitize(decodedBody);
 
   return (
-    <Card sx={{ p: 2, height: "100%", overflow: "hidden" }}>
+    <Card sx={{ p: 2, height: "100%", overflow: "hidden" }} data-testid="post-card">
       <CardContent>
         <Box
           sx={{
