@@ -246,23 +246,61 @@ case "$DB_HOST" in
   *)                       DB_IS_LOCAL=false ;;
 esac
 
+# Is the database server installed on this machine?
+#
+# NOT `systemctl list-unit-files | grep "^$DB_SERVICE.service"`, which is what
+# this used to be. That printed "no database server is installed here" on a
+# machine where MariaDB was installed and running seconds earlier: the column
+# is padded and aliased differently across systemd versions, so anchoring a
+# grep to the start of the line is not a reliable way to ask the question.
+# Asking systemd about one unit by name, and falling back to the file on disk,
+# is.
+db_server_installed() {
+  systemctl list-unit-files "$DB_SERVICE.service" 2>/dev/null \
+    | grep -q "$DB_SERVICE.service" && return 0
+  [[ -f "/usr/lib/systemd/system/$DB_SERVICE.service" ]] && return 0
+  [[ -f "/lib/systemd/system/$DB_SERVICE.service" ]] && return 0
+  [[ -f "/etc/systemd/system/$DB_SERVICE.service" ]] && return 0
+  return 1
+}
+
 if [[ "$DB_IS_LOCAL" == true ]]; then
   ok "database on this machine ($DB_HOST)"
 
-  # Only now is it known that a server belongs here.
-  if ! systemctl list-unit-files 2>/dev/null | grep -q "^$DB_SERVICE.service"; then
-    if [[ "$INSTALL_DEPS" == true ]]; then
-      # shellcheck disable=SC2086
-      $PKG_INSTALL $DB_SERVER_PACKAGES || die "could not install $DB_SERVER_PACKAGES"
-    else
-      die "DB_HOST is '$DB_HOST' but no database server is installed here.
-    Install one:
+  if systemctl is-active --quiet "$DB_SERVICE" 2>/dev/null; then
+    ok "$DB_SERVICE is running"
+  else
+    if ! db_server_installed; then
+      if [[ "$INSTALL_DEPS" == true ]]; then
+        # shellcheck disable=SC2086
+        $PKG_INSTALL $DB_SERVER_PACKAGES || die "could not install $DB_SERVER_PACKAGES"
+        ok "installed $DB_SERVER_PACKAGES"
+      else
+        die "DB_HOST is '$DB_HOST' but no database server is installed here.
+    The simplest way to set one up, with nothing to fill in:
+        sudo bash deploy/setup-local-db.sh
+
+    Or by hand:
         sudo $PKG_INSTALL $DB_SERVER_PACKAGES
         sudo systemctl enable --now $DB_SERVICE
+
     ...or point DB_HOST at your RDS endpoint in $ENV_FILE."
+      fi
     fi
+
+    systemctl enable --now "$DB_SERVICE" >/dev/null 2>&1 || true
+
+    # The unit reports started before the socket takes queries.
+    for _ in $(seq 1 30); do
+      systemctl is-active --quiet "$DB_SERVICE" 2>/dev/null && break
+      sleep 1
+    done
+    systemctl is-active --quiet "$DB_SERVICE" 2>/dev/null \
+      || die "$DB_SERVICE will not start. Look at why:
+        sudo systemctl status $DB_SERVICE
+        sudo journalctl -u $DB_SERVICE -n 50 --no-pager"
+    ok "$DB_SERVICE is running"
   fi
-  systemctl enable --now "$DB_SERVICE" >/dev/null 2>&1 || true
 else
   ok "database is remote ($DB_HOST) — nothing to install or run here"
 

@@ -436,6 +436,8 @@ sudo mysqldump --single-transaction social_app | gzip > ~/social_app-$(date +%F)
 | **phpMyAdmin does not load / httpd will not start** | Apache and nginx are both trying to bind port 80. Use `deploy/phpmyadmin.sh`, which runs it under nginx instead. |
 | **`dnf` prints hundreds of lines of "curl-minimal conflicts with curl"** | Amazon Linux ships `curl-minimal`; asking for the full `curl` package makes dnf try to replace it and it refuses. curl is already installed — drop it from the install list, or add `--allowerasing` if you really need the full build. |
 | **`aws rds describe-db-instances` says "Unable to locate credentials"** | The instance has no IAM role attached. Nothing is broken — read the endpoint from the RDS console instead, or attach a role with `AmazonRDSReadOnlyAccess`. |
+| **"no database server is installed here" right after installing one** | Was a bug in `deploy.sh`: it grepped the whole `systemctl list-unit-files` listing anchored to the start of the line, and that output is indented on some systemd versions. Fixed — it now asks systemd about the one unit by name. `git pull` if you still see it. |
+| **`Unit ybo-api.service not found`** | `deploy.sh` has not got as far as installing the services yet. Fix whatever it stopped on and run it again; the units are installed near the end. |
 
 ---
 

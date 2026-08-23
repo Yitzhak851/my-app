@@ -53,9 +53,22 @@ else
   INSTALL="apt-get install -y"
 fi
 
+# Is the server already installed? Asked by unit name rather than by grepping
+# the whole `list-unit-files` listing: that output is padded and aliased
+# differently between systemd versions, so anchoring a grep to the start of the
+# line reports "not installed" on a machine where it plainly is.
+db_server_installed() {
+  systemctl list-unit-files "$DB_SERVICE.service" 2>/dev/null \
+    | grep -q "$DB_SERVICE.service" && return 0
+  [[ -f "/usr/lib/systemd/system/$DB_SERVICE.service" ]] && return 0
+  [[ -f "/lib/systemd/system/$DB_SERVICE.service" ]] && return 0
+  [[ -f "/etc/systemd/system/$DB_SERVICE.service" ]] && return 0
+  return 1
+}
+
 # ── the server ───────────────────────────────────────────────────────────────
 step "Database server"
-if systemctl list-unit-files 2>/dev/null | grep -q "^$DB_SERVICE.service"; then
+if db_server_installed; then
   ok "$SERVER_PACKAGE already installed"
 else
   # shellcheck disable=SC2086
