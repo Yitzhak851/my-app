@@ -23,10 +23,12 @@ SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 SKIP_BUILD=false
 RUN_SMOKE=true
+INSTALL_DEPS=false
 for arg in "$@"; do
   case "$arg" in
-    --skip-build) SKIP_BUILD=true ;;
-    --no-smoke)   RUN_SMOKE=false ;;
+    --skip-build)   SKIP_BUILD=true ;;
+    --no-smoke)     RUN_SMOKE=false ;;
+    --install-deps) INSTALL_DEPS=true ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -38,22 +40,131 @@ die()   { printf '\n\033[31mFAILED:\033[0m %s\n\n' "$1" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Run with sudo: sudo bash deploy/deploy.sh"
 
+# ── which distribution is this ───────────────────────────────────────────────
+#
+# Ubuntu and Amazon Linux disagree about almost everything this script touches:
+# the package manager, the user nginx runs as, where an nginx site lives, and
+# what the MySQL package and service are called. Everything below reads these
+# five variables instead of assuming one of them.
+#
+# YBO_FAMILY=debian|rhel forces the choice, which is how the branches are
+# tested without two machines.
+detect_family() {
+  if [[ -n "${YBO_FAMILY:-}" ]]; then echo "$YBO_FAMILY"; return; fi
+  local id="" like=""
+  if [[ -r /etc/os-release ]]; then
+    id=$(. /etc/os-release && echo "${ID:-}")
+    like=$(. /etc/os-release && echo "${ID_LIKE:-}")
+  fi
+  case "$id $like" in
+    *debian*|*ubuntu*) echo debian ;;
+    *rhel*|*fedora*|*amzn*|*centos*) echo rhel ;;
+    *) echo unknown ;;
+  esac
+}
+
+FAMILY=$(detect_family)
+case "$FAMILY" in
+  debian)
+    NODE_HINT='curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt-get install -y nodejs'
+    PKG_INSTALL="apt-get install -y"
+    PKG_REFRESH="apt-get update"
+    WEB_USER=www-data
+    NGINX_SITE=/etc/nginx/sites-available/ybo
+    DB_SERVICE=mysql
+    DB_SERVER_PACKAGES="mysql-server"
+    # The client is always needed — it is what applies db/schema.sql, whether
+    # the database is on this machine or on RDS.
+    DB_CLIENT_PACKAGES="mysql-client"
+    BASE_PACKAGES="python3 python3-venv python3-pip nginx git rsync curl mysql-client"
+    ;;
+  rhel)
+    NODE_HINT='sudo dnf install -y nodejs20 nodejs20-npm'
+    PKG_INSTALL="dnf install -y"
+    PKG_REFRESH="dnf makecache"
+    WEB_USER=nginx
+    # No sites-available on this family; nginx.conf includes conf.d/*.conf.
+    NGINX_SITE=/etc/nginx/conf.d/ybo.conf
+    # Amazon Linux 2023 has no mysql-server package. MariaDB is the drop-in
+    # here: same wire protocol, same client, and the connector the app uses
+    # talks to it without a change.
+    DB_SERVICE=mariadb
+    DB_SERVER_PACKAGES="mariadb105-server"
+    DB_CLIENT_PACKAGES="mariadb105"
+    BASE_PACKAGES="python3 python3-pip nginx git rsync tar mariadb105"
+    ;;
+  *)
+    die "Cannot tell which distribution this is (no usable /etc/os-release).
+    Force it if you know:  sudo YBO_FAMILY=debian bash deploy/deploy.sh"
+    ;;
+esac
+
+step "System"
+ok "$FAMILY family — nginx runs as '$WEB_USER', database service '$DB_SERVICE'"
+
 # ── prerequisites ────────────────────────────────────────────────────────────
 step "Checking what is installed"
+
+install_prerequisites() {
+  step "Installing prerequisites"
+  $PKG_REFRESH >/dev/null 2>&1 || true
+  # shellcheck disable=SC2086
+  $PKG_INSTALL $BASE_PACKAGES || die "could not install: $BASE_PACKAGES"
+
+  # Only the CLIENT here. Whether a database server belongs on this machine
+  # depends on DB_HOST, which lives in .env and has not been read yet — and
+  # installing MySQL on a box that talks to RDS is a service running for
+  # nothing, on a host with 1 GB of memory.
+  if ! command -v mysql >/dev/null; then
+    # shellcheck disable=SC2086
+    $PKG_INSTALL $DB_CLIENT_PACKAGES || warn "could not install $DB_CLIENT_PACKAGES"
+  fi
+
+  if ! command -v node >/dev/null; then
+    if [[ "$FAMILY" == debian ]]; then
+      curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+      $PKG_INSTALL nodejs
+    else
+      # Amazon Linux 2023 ships node 20 as its own package. The plain
+      # "nodejs" package there is 18, which also works, but pin the newer one.
+      $PKG_INSTALL nodejs20 nodejs20-npm 2>/dev/null || $PKG_INSTALL nodejs npm
+      # The nodejs20 package installs node20/npm20; make plain names work.
+      [[ -x /usr/bin/node ]] || ln -sf /usr/bin/node-20 /usr/bin/node 2>/dev/null || true
+      [[ -x /usr/bin/npm ]]  || ln -sf /usr/bin/npm-20  /usr/bin/npm  2>/dev/null || true
+    fi
+  fi
+  ok "prerequisites installed"
+}
+
 missing=()
-for cmd in python3 node npm nginx; do
+for cmd in python3 node npm nginx rsync; do
   command -v "$cmd" >/dev/null || missing+=("$cmd")
 done
 python3 -c 'import venv' 2>/dev/null || missing+=("python3-venv")
 
 if ((${#missing[@]})); then
-  die "Missing: ${missing[*]}
-    On Ubuntu:
-        sudo apt update
-        sudo apt install -y python3 python3-venv python3-pip nginx mysql-server
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-        sudo apt install -y nodejs"
+  if [[ "$INSTALL_DEPS" == true ]]; then
+    install_prerequisites
+  else
+    die "Missing: ${missing[*]}
+
+    Let this script install them:
+        sudo bash deploy/deploy.sh --install-deps
+
+    Or do it yourself on $FAMILY:
+        sudo $PKG_REFRESH
+        sudo $PKG_INSTALL $BASE_PACKAGES
+        $NODE_HINT"
+  fi
 fi
+
+missing=()
+for cmd in python3 node npm nginx rsync; do
+  command -v "$cmd" >/dev/null || missing+=("$cmd")
+done
+((${#missing[@]})) && die "still missing after installing: ${missing[*]}"
+
 ok "python3 $(python3 -V 2>&1 | cut -d' ' -f2), node $(node -v), nginx present"
 
 # ── the service account ──────────────────────────────────────────────────────
@@ -127,24 +238,84 @@ fi
 ok "installed"
 
 # ── database ─────────────────────────────────────────────────────────────────
+step "Database"
+
+DB_HOST="${DB_HOST:-localhost}"
+case "$DB_HOST" in
+  localhost|127.0.0.1|::1) DB_IS_LOCAL=true ;;
+  *)                       DB_IS_LOCAL=false ;;
+esac
+
+if [[ "$DB_IS_LOCAL" == true ]]; then
+  ok "database on this machine ($DB_HOST)"
+
+  # Only now is it known that a server belongs here.
+  if ! systemctl list-unit-files 2>/dev/null | grep -q "^$DB_SERVICE.service"; then
+    if [[ "$INSTALL_DEPS" == true ]]; then
+      # shellcheck disable=SC2086
+      $PKG_INSTALL $DB_SERVER_PACKAGES || die "could not install $DB_SERVER_PACKAGES"
+    else
+      die "DB_HOST is '$DB_HOST' but no database server is installed here.
+    Install one:
+        sudo $PKG_INSTALL $DB_SERVER_PACKAGES
+        sudo systemctl enable --now $DB_SERVICE
+    ...or point DB_HOST at your RDS endpoint in $ENV_FILE."
+    fi
+  fi
+  systemctl enable --now "$DB_SERVICE" >/dev/null 2>&1 || true
+else
+  ok "database is remote ($DB_HOST) — nothing to install or run here"
+
+  # A wrong security group is the usual reason this fails, and the error from
+  # the client further down ("Can't connect") does not say which of the many
+  # possible reasons it was. Test the socket first and name the likely cause.
+  if ! timeout 5 bash -c "echo > /dev/tcp/$DB_HOST/3306" 2>/dev/null; then
+    die "cannot reach $DB_HOST on port 3306.
+
+    Almost always the RDS security group. Fix it in the console:
+        RDS > your database > Connectivity & security > the VPC security group
+        Edit inbound rules > Add rule
+        Type: MySQL/Aurora (3306)
+        Source: the EC2 instance's security group  (NOT 0.0.0.0/0)
+
+    Also worth checking: is the instance status 'Available' rather than stopped,
+    and is it in the same VPC as this EC2 instance?"
+  fi
+  ok "$DB_HOST answers on port 3306"
+fi
+
 step "Database schema"
 # db/schema.sql is written as a re-runnable migration: it creates what is
 # missing and leaves existing tables and their data alone. Running it on an
 # established database is a no-op, which is what makes this script safe to
 # repeat on every deploy.
-if MYSQL_PWD="$DB_PASSWORD" mysql -h "${DB_HOST:-localhost}" -u "$DB_USER" \
+if MYSQL_PWD="$DB_PASSWORD" mysql -h "$DB_HOST" -u "$DB_USER" \
      -e "SELECT 1" "$DB_NAME" >/dev/null 2>&1; then
-  MYSQL_PWD="$DB_PASSWORD" mysql -h "${DB_HOST:-localhost}" -u "$DB_USER" \
+  MYSQL_PWD="$DB_PASSWORD" mysql -h "$DB_HOST" -u "$DB_USER" \
     "$DB_NAME" < "$APP_DIR/db/schema.sql"
-  ok "schema applied to '$DB_NAME'"
-else
-  die "cannot connect to MySQL as '$DB_USER'.
-    Create the database and user first:
+  ok "schema applied to '$DB_NAME' on $DB_HOST"
+elif [[ "$DB_IS_LOCAL" == true ]]; then
+  die "cannot connect as '$DB_USER'. Create the database and the user first:
         sudo mysql -e \"CREATE DATABASE IF NOT EXISTS $DB_NAME
                         CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\"
         sudo mysql -e \"CREATE USER IF NOT EXISTS '$DB_USER'@'localhost'
                         IDENTIFIED BY '<the password from .env>';\"
         sudo mysql -e \"GRANT ALL ON $DB_NAME.* TO '$DB_USER'@'localhost';\""
+else
+  die "reached $DB_HOST but could not sign in as '$DB_USER' to database '$DB_NAME'.
+
+    On RDS the master user is usually 'admin'. Either put the master
+    credentials in $ENV_FILE, or create a database and user for the app —
+    connect with the master account and run:
+
+        mysql -h $DB_HOST -u <master-user> -p
+        CREATE DATABASE IF NOT EXISTS $DB_NAME
+               CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        CREATE USER IF NOT EXISTS '$DB_USER'@'%' IDENTIFIED BY '<the password from .env>';
+        GRANT ALL ON $DB_NAME.* TO '$DB_USER'@'%';
+
+    Note the '%' rather than 'localhost': on RDS the app connects over the
+    network, so a user restricted to localhost can never sign in."
 fi
 
 step "Agent accounts"
@@ -167,7 +338,7 @@ if [[ "$SKIP_BUILD" == false ]]; then
 
   mkdir -p "$WEB_ROOT"
   rsync -a --delete "$APP_DIR/frontend/dist/" "$WEB_ROOT/"
-  chown -R www-data:www-data "$WEB_ROOT"
+  chown -R "$WEB_USER:$WEB_USER" "$WEB_ROOT"
   ok "built and published to $WEB_ROOT"
 
   grep -rq "localhost:5000" "$WEB_ROOT" \
@@ -182,7 +353,7 @@ step "Permissions"
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 chmod 600 "$ENV_FILE"
 
-# nginx serves the uploads directly, as www-data. Reading a file needs execute
+# nginx serves the uploads directly, as $WEB_USER. Reading a file needs execute
 # permission on EVERY directory on the way to it, not just on the last one — a
 # private parent produces a 404 in the browser and
 # "stat() failed (13: Permission denied)" in the nginx error log, which does
@@ -197,19 +368,46 @@ cp "$APP_DIR/deploy/ybo-api.service"    /etc/systemd/system/
 cp "$APP_DIR/deploy/ybo-agents.service" /etc/systemd/system/
 systemctl daemon-reload
 
-if [[ ! -f /etc/nginx/sites-available/ybo ]]; then
-  cp "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/ybo
-  ln -sf /etc/nginx/sites-available/ybo /etc/nginx/sites-enabled/ybo
-  rm -f /etc/nginx/sites-enabled/default
-  warn "installed the nginx site — set server_name in /etc/nginx/sites-available/ybo"
+if [[ ! -f "$NGINX_SITE" ]]; then
+  install -D -m 644 "$APP_DIR/deploy/nginx.conf" "$NGINX_SITE"
+
+  if [[ "$FAMILY" == debian ]]; then
+    ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/ybo
+    rm -f /etc/nginx/sites-enabled/default
+  else
+    # The stock nginx.conf on this family carries its own `server` block on
+    # port 80 marked default_server. Two default servers is a hard error, and
+    # without default_server on ours the stock one answers first and every
+    # visitor gets the nginx welcome page instead of the app. So the main
+    # config is replaced with one that does nothing but include conf.d.
+    if [[ ! -f /etc/nginx/nginx.conf.ybo-backup ]]; then
+      cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.ybo-backup
+      ok "kept the original main config at /etc/nginx/nginx.conf.ybo-backup"
+    fi
+    sed "s/@WEB_USER@/$WEB_USER/" "$APP_DIR/deploy/nginx-main.conf" > /etc/nginx/nginx.conf
+  fi
+
+  warn "installed the nginx site — set server_name in $NGINX_SITE"
 else
   # Left alone on purpose: certbot edits this file in place to add the
   # certificate. Overwriting it on every deploy would undo that every time.
   ok "nginx site already configured — left untouched"
 fi
 
+# SELinux, where it is enforcing, blocks nginx from opening a socket to
+# gunicorn and from reading files outside its own contexts. The symptom is a
+# 502 with "Permission denied" in the error log, which looks nothing like a
+# policy problem.
+if command -v getenforce >/dev/null && [[ "$(getenforce 2>/dev/null)" == "Enforcing" ]]; then
+  setsebool -P httpd_can_network_connect 1 2>/dev/null \
+    && ok "SELinux: nginx allowed to reach gunicorn" \
+    || warn "SELinux is enforcing and httpd_can_network_connect could not be set"
+  command -v restorecon >/dev/null && restorecon -R "$WEB_ROOT" "$APP_DIR/backend/uploads" 2>/dev/null || true
+fi
+
 nginx -t >/dev/null 2>&1 || die "nginx configuration is invalid — run: sudo nginx -t"
 
+systemctl enable --now nginx >/dev/null 2>&1 || true
 systemctl enable --now ybo-api ybo-agents >/dev/null 2>&1 || true
 systemctl restart ybo-api
 systemctl restart ybo-agents
@@ -234,13 +432,13 @@ if [[ "$RUN_SMOKE" == true ]]; then
   check "the agents are running"   "systemctl is-active --quiet ybo-agents"
 
   # nginx reads the uploads directory directly, so every parent directory needs
-  # to be traversable by www-data. Checked with a real file when there is one.
+  # to be traversable by $WEB_USER. Checked with a real file when there is one.
   sample=$(find "$APP_DIR/backend/uploads" -type f -name '*.*' | head -1 || true)
   if [[ -n "$sample" ]]; then
     check "nginx can serve an uploaded image" \
       "curl -fsS http://127.0.0.1/static/uploads/$(basename "$sample") -o /dev/null"
   else
-    sudo -u www-data test -x "$APP_DIR/backend/uploads" \
+    sudo -u "$WEB_USER" test -x "$APP_DIR/backend/uploads" \
       && ok "nginx can reach the uploads directory" \
       || { warn "nginx cannot reach $APP_DIR/backend/uploads"; ((failures++)); }
   fi
