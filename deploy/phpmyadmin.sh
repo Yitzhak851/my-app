@@ -80,14 +80,42 @@ ok "pointing phpMyAdmin at $DB_HOST — the same database the app uses"
 
 # ── packages ─────────────────────────────────────────────────────────────────
 step "PHP"
+
+# Amazon Linux ships curl-minimal, and asking for the full `curl` package makes
+# dnf try to replace it — which it refuses to do, with two hundred lines of
+# "conflicts with curl provided by ...". curl is already on the machine; only
+# install it if it genuinely is not.
+NEEDED_TOOLS=()
+command -v curl >/dev/null || NEEDED_TOOLS+=(curl)
+command -v tar  >/dev/null || NEEDED_TOOLS+=(tar)
+
 if command -v dnf >/dev/null; then
-  dnf install -y php-fpm php-mysqlnd php-json php-mbstring php-xml php-zip curl tar >/dev/null
+  # The essential four. Without any one of these phpMyAdmin shows a blank page
+  # rather than an error, so a failure here has to stop the script.
+  dnf install -y php-fpm php-mysqlnd php-mbstring php-xml >/dev/null \
+    || die "could not install PHP. Try it by hand to see why:
+        sudo dnf install -y php-fpm php-mysqlnd php-mbstring php-xml"
+
+  # Nice to have. Package names for these move between releases, and a name
+  # that does not exist must not take the whole install down with it.
+  for extra in php-zip php-gd php-bcmath; do
+    dnf install -y "$extra" >/dev/null 2>&1 || true
+  done
+  ((${#NEEDED_TOOLS[@]})) && dnf install -y "${NEEDED_TOOLS[@]}" >/dev/null 2>&1
+
   PHP_POOL=/etc/php-fpm.d/www.conf
   PHP_SERVICE=php-fpm
   PHP_SOCKET=/run/php-fpm/ybo.sock
 else
   apt-get update -qq >/dev/null
-  apt-get install -y php-fpm php-mysql php-json php-mbstring php-xml php-zip curl >/dev/null
+  apt-get install -y php-fpm php-mysql php-mbstring php-xml >/dev/null \
+    || die "could not install PHP. Try it by hand to see why:
+        sudo apt install -y php-fpm php-mysql php-mbstring php-xml"
+  for extra in php-zip php-gd php-bcmath; do
+    apt-get install -y "$extra" >/dev/null 2>&1 || true
+  done
+  ((${#NEEDED_TOOLS[@]})) && apt-get install -y "${NEEDED_TOOLS[@]}" >/dev/null 2>&1
+
   PHP_POOL=$(ls /etc/php/*/fpm/pool.d/www.conf 2>/dev/null | head -1)
   PHP_SERVICE=$(systemctl list-unit-files | grep -o 'php[0-9.]*-fpm.service' | head -1)
   PHP_SERVICE="${PHP_SERVICE%.service}"

@@ -172,14 +172,42 @@ letting a driver error do the explaining.
 
 ### Option B — the database on the EC2 instance
 
-```bash
-# Ubuntu
-sudo mysql_secure_installation
+One command, nothing to fill in:
 
-# Amazon Linux 2023 (MariaDB) — start it first
+```bash
+sudo bash deploy/setup-local-db.sh
+```
+
+It installs the server, starts it, creates the database and the application's
+user with a generated password, writes that password into `.env`, and then
+checks that the application's user can actually sign in. The password is never
+printed — not to the screen, not into your shell history. Run it again if you
+ever need to rotate it.
+
+<details>
+<summary>The same thing by hand</summary>
+
+```bash
+sudo dnf install -y mariadb105-server        # Amazon Linux
 sudo systemctl enable --now mariadb
 sudo mariadb-secure-installation
+
+sudo mysql
 ```
+
+The prompt changes to `MariaDB [(none)]>`. **These are SQL, and only work
+there** — pasted into the shell they are "command not found":
+
+```sql
+CREATE DATABASE social_app CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'ybo'@'localhost' IDENTIFIED BY 'a-long-random-password';
+GRANT ALL PRIVILEGES ON social_app.* TO 'ybo'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+Then put the same password into `DB_PASSWORD` in `/opt/ybo/backend/.env`.
+</details>
 
 Then create the database and a user for the app. Give it a password of its own —
 the app must not connect as root:
@@ -405,7 +433,9 @@ sudo mysqldump --single-transaction social_app | gzip > ~/social_app-$(date +%F)
 | **The nginx welcome page instead of the app** | On the RHEL family the stock `nginx.conf` has its own `default_server` on port 80. `deploy.sh` replaces the main config for this reason; if you installed the site by hand, do the same or remove that block. |
 | **nginx will not start: `socket() [::]:80 failed (97: Address family not supported)`** | The host has no IPv6. `deploy/nginx.conf` deliberately does not listen on `[::]` for this reason — if you added it back, take it out again. |
 | **502, and the nginx error log says "Permission denied" connecting upstream** | SELinux is enforcing. `sudo setsebool -P httpd_can_network_connect 1`. |
-| **phpMyAdmin does not load / httpd will not start** | Apache and nginx are both trying to bind port 80. See "phpMyAdmin alongside this app" above. |
+| **phpMyAdmin does not load / httpd will not start** | Apache and nginx are both trying to bind port 80. Use `deploy/phpmyadmin.sh`, which runs it under nginx instead. |
+| **`dnf` prints hundreds of lines of "curl-minimal conflicts with curl"** | Amazon Linux ships `curl-minimal`; asking for the full `curl` package makes dnf try to replace it and it refuses. curl is already installed — drop it from the install list, or add `--allowerasing` if you really need the full build. |
+| **`aws rds describe-db-instances` says "Unable to locate credentials"** | The instance has no IAM role attached. Nothing is broken — read the endpoint from the RDS console instead, or attach a role with `AmazonRDSReadOnlyAccess`. |
 
 ---
 
